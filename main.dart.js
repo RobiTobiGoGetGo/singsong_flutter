@@ -69283,7 +69283,7 @@ an(){return new A.zX(A.ari(),B.dz,A.d([],t.M6),A.aE(t.hD),A.d([],t.s))}}
 A.zX.prototype={
 aq(){var s,r=this
 r.aR()
-r.hb("App started v1.0.6+7")
+r.hb("App started v1.0.7+8")
 r.rw()
 s=r.d.ay
 new A.bR(s,A.q(s).h("bR<1>")).j9(new A.abZ(r))},
@@ -69424,7 +69424,7 @@ j=A.aeZ(j,B.aJ,B.aE)
 i=A.ad(a).ax
 s=i.d
 i=s==null?i.b:s
-s=A.d([A.E2(l,l,B.B8,l,l,m.gWZ(),l,l,"Download Error Logs"),A.ow(A.jq("v1.0.6+7",B.Li),l,l),B.vX,A.alc(B.Ba,B.NY,m.ga1l()),B.OV,A.alc(B.B5,A.jq("Web Mode",l),m.ga1k()),B.vX],k)
+s=A.d([A.E2(l,l,B.B8,l,l,m.gWZ(),l,l,"Download Error Logs"),A.ow(A.jq("v1.0.7+8",B.Li),l,l),B.vX,A.alc(B.Ba,B.NY,m.ga1l()),B.OV,A.alc(B.B5,A.jq("Web Mode",l),m.ga1k()),B.vX],k)
 r=A.d([B.G7],k)
 q=m.r.length
 if(q===0)r.push(B.AE)
