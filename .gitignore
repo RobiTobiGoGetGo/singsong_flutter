@@ -1,0 +1,17 @@
+# Flutter/Dart specific
+.DS_Store
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+pubspec.lock
+# IDE specific
+.idea/
+*.iml
+*.ipr
+*.iws
+# Miscellaneous
+*.log
+*.tmp
+*.swp
+*.swo
