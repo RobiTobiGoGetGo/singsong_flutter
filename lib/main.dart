@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart' show kIsWeb;
 // ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html; // Used for downloading log file on Web
+import 'dart:html' as html;
 
 void main() {
   runApp(const SingSongApp());
@@ -35,13 +35,14 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.5+6';
+  static const String appVersion = '1.0.6+7';
   final AudioPlayer _audioPlayer = AudioPlayer();
   List<PlatformFile> _allFiles = [];
   final Set<PlatformFile> _selectedFiles = {};
   String? _sourcePath;
   String? _destinationPath;
   final List<String> _logs = [];
+  String? _currentWebUrl;
 
   @override
   void initState() {
@@ -52,8 +53,16 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   @override
   void dispose() {
+    _cleanupWebUrl();
     _audioPlayer.dispose();
     super.dispose();
+  }
+
+  void _cleanupWebUrl() {
+    if (_currentWebUrl != null) {
+      html.Url.revokeObjectUrl(_currentWebUrl!);
+      _currentWebUrl = null;
+    }
   }
 
   void _log(String message) {
@@ -174,7 +183,13 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   void _playFile(PlatformFile file) async {
     _log('Attempting to play: ${file.name} (Size: ${file.size} bytes)');
     try {
-      if (file.bytes != null) {
+      if (kIsWeb && file.bytes != null) {
+        _log('Playing via Blob URL (Web fix)...');
+        _cleanupWebUrl();
+        final blob = html.Blob([file.bytes!]);
+        _currentWebUrl = html.Url.createObjectUrlFromBlob(blob);
+        await _audioPlayer.play(UrlSource(_currentWebUrl!));
+      } else if (file.bytes != null) {
         _log('Playing from bytes...');
         await _audioPlayer.play(BytesSource(file.bytes!));
       } else if (file.path != null) {
