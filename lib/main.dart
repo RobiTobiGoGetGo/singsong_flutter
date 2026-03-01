@@ -35,7 +35,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.7+8';
+  static const String appVersion = '1.0.8+9';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   PlatformFile? _currentFile;
@@ -137,7 +137,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         type: FileType.custom,
         allowedExtensions: ['mp3'],
         allowMultiple: true,
-        withData: true, 
+        withData: kIsWeb, // Required for Web to keep data access
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -146,7 +146,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           return name.endsWith('.mp3');
         }).toList();
         
-        _log('Selected ${result.files.length} total files. Found ${mp3Files.length} MP3s.');
+        _log('Indexed ${mp3Files.length} MP3 files.');
 
         setState(() {
           _allFiles = mp3Files;
@@ -202,8 +202,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       return;
     }
 
-    // New file or stopped
-    _log('Attempting to play: ${file.name} (Size: ${file.size} bytes)');
+    _log('Attempting playback for: ${file.name}');
     try {
       setState(() {
         _currentFile = file;
@@ -222,7 +221,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         _log('Playing from path: ${file.path}');
         await _audioPlayer.play(DeviceFileSource(file.path!));
       } else {
-        throw 'No file data (bytes or path) available.';
+        throw 'File content not available.';
       }
     } catch (e) {
       _log('PLAYBACK ERROR for ${file.name}: $e');
@@ -314,7 +313,21 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                               value: isSelected,
                               onChanged: (_) => _toggleSelection(file),
                             ),
-                            title: Text(file.name, style: TextStyle(fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal, color: isCurrent ? Colors.blue : null)),
+                            title: Row(
+                              children: [
+                                const Icon(Icons.audiotrack, size: 16, color: Colors.grey),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(file.name, 
+                                    style: TextStyle(
+                                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal, 
+                                      color: isCurrent ? Colors.blue : null
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                             subtitle: Text('${(file.size / 1024 / 1024).toStringAsFixed(2)} MB'),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
