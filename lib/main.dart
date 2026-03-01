@@ -33,7 +33,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.1+2';
+  static const String appVersion = '1.0.2+3';
   final AudioPlayer _audioPlayer = AudioPlayer();
   List<PlatformFile> _allFiles = [];
   final Set<PlatformFile> _selectedFiles = {};
