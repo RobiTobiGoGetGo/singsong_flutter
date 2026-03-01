@@ -33,7 +33,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.2+3';
+  static const String appVersion = '1.0.3+4';
   final AudioPlayer _audioPlayer = AudioPlayer();
   List<PlatformFile> _allFiles = [];
   final Set<PlatformFile> _selectedFiles = {};
@@ -73,24 +73,39 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   }
 
   Future<void> _pickSourceFiles() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['mp3'],
-      allowMultiple: true,
-      withData: true, // Required for Web to access file content
-    );
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: true,
+        withData: true, 
+      );
 
-    if (result != null) {
-      setState(() {
-        _allFiles = result.files.where((file) => file.name.toLowerCase().endsWith('.mp3')).toList();
+      if (result != null) {
+        final mp3Files = result.files.where((file) => file.name.toLowerCase().endsWith('.mp3')).toList();
         
-        // On Web, file.path is null. We only save sourcePath if we have a path.
-        if (result.files.isNotEmpty && result.files.first.path != null) {
-          _savePath('sourcePath', p.dirname(result.files.first.path!));
-        } else if (kIsWeb) {
-          _sourcePath = 'Web Session';
+        setState(() {
+          _allFiles = mp3Files;
+          if (result.files.isNotEmpty && result.files.first.path != null) {
+            _savePath('sourcePath', p.dirname(result.files.first.path!));
+          } else if (kIsWeb) {
+            _sourcePath = 'Web Session';
+          }
+        });
+
+        if (mp3Files.isEmpty && result.files.isNotEmpty) {
+           ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Selected ${result.files.length} files, but none were recognized as .mp3')),
+          );
+        } else {
+           ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Successfully loaded ${mp3Files.length} MP3 files.')),
+          );
         }
-      });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking files: $e')),
+      );
     }
   }
 
@@ -156,9 +171,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         backgroundColor: Colors.green,
       ),
     );
-    
-    // Web implementation would typically involve triggering downloads for each file
-    // or creating a ZIP, as direct file system writing isn't available.
   }
 
   @override
