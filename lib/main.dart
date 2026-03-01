@@ -4,6 +4,8 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart' show kIsWeb;
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html; // Used for downloading log file on Web
 
 void main() {
   runApp(const SingSongApp());
@@ -33,16 +35,18 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.4+5';
+  static const String appVersion = '1.0.5+6';
   final AudioPlayer _audioPlayer = AudioPlayer();
   List<PlatformFile> _allFiles = [];
   final Set<PlatformFile> _selectedFiles = {};
   String? _sourcePath;
   String? _destinationPath;
+  final List<String> _logs = [];
 
   @override
   void initState() {
     super.initState();
+    _log('App started v$appVersion');
     _loadStoredPaths();
   }
 
@@ -52,29 +56,59 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     super.dispose();
   }
 
-  Future<void> _loadStoredPaths() async {
-    final prefs = await SharedPreferences.getInstance();
+  void _log(String message) {
+    final logLine = '${DateTime.now()}: $message';
+    debugPrint(logLine);
     setState(() {
-      _sourcePath = prefs.getString('sourcePath');
-      _destinationPath = prefs.getString('destinationPath');
+      _logs.add(logLine);
     });
+  }
+
+  void _downloadLogs() {
+    if (kIsWeb) {
+      final content = _logs.join('\n');
+      final blob = html.Blob([content], 'text/plain');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.AnchorElement(href: url)
+        ..setAttribute('download', 'error_logs.txt')
+        ..click();
+      html.Url.revokeObjectUrl(url);
+    }
+  }
+
+  Future<void> _loadStoredPaths() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _sourcePath = prefs.getString('sourcePath');
+        _destinationPath = prefs.getString('destinationPath');
+      });
+      _log('Loaded paths: source=$_sourcePath, dest=$_destinationPath');
+    } catch (e) {
+      _log('Error loading paths: $e');
+    }
   }
 
   Future<void> _savePath(String key, String path) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(key, path);
-    setState(() {
-      if (key == 'sourcePath') {
-        _sourcePath = path;
-      } else {
-        _destinationPath = path;
-      }
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, path);
+      setState(() {
+        if (key == 'sourcePath') {
+          _sourcePath = path;
+        } else {
+          _destinationPath = path;
+        }
+      });
+      _log('Saved path: $key=$path');
+    } catch (e) {
+      _log('Error saving path $key: $e');
+    }
   }
 
   Future<void> _pickSourceFiles() async {
+    _log('Attempting to pick files...');
     try {
-      // Clear existing files to provide immediate feedback
       setState(() {
         _allFiles = [];
       });
@@ -83,16 +117,17 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         type: FileType.custom,
         allowedExtensions: ['mp3'],
         allowMultiple: true,
-        withData: true, // Crucial for Web
+        withData: true, 
       );
 
       if (result != null && result.files.isNotEmpty) {
-        // Filter for MP3s just in case the OS picker didn't respect allowedExtensions
         final mp3Files = result.files.where((file) {
           final name = file.name.toLowerCase();
           return name.endsWith('.mp3');
         }).toList();
         
+        _log('Selected ${result.files.length} total files. Found ${mp3Files.length} MP3s.');
+
         setState(() {
           _allFiles = mp3Files;
           if (!kIsWeb && result.files.first.path != null) {
@@ -106,17 +141,12 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
            ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Selected ${result.files.length} files, but none were recognized as .mp3')),
           );
-        } else {
-           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Successfully loaded ${mp3Files.length} MP3 files.')),
-          );
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No files were selected.')),
-        );
+        _log('File picker cancelled or no files selected.');
       }
     } catch (e) {
+      _log('CRITICAL ERROR picking files: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error picking files: $e')),
       );
@@ -126,27 +156,35 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   Future<void> _pickDestinationDirectory() async {
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Directory picking is not supported on Web. Files will be "downloaded" instead when copying.')),
+        const SnackBar(content: Text('Directory picking is not supported on Web.')),
       );
       return;
     }
     
-    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
-    if (selectedDirectory != null) {
-      _savePath('destinationPath', selectedDirectory);
+    try {
+      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      if (selectedDirectory != null) {
+        _savePath('destinationPath', selectedDirectory);
+      }
+    } catch (e) {
+      _log('Error picking directory: $e');
     }
   }
 
   void _playFile(PlatformFile file) async {
+    _log('Attempting to play: ${file.name} (Size: ${file.size} bytes)');
     try {
       if (file.bytes != null) {
+        _log('Playing from bytes...');
         await _audioPlayer.play(BytesSource(file.bytes!));
       } else if (file.path != null) {
+        _log('Playing from path: ${file.path}');
         await _audioPlayer.play(DeviceFileSource(file.path!));
       } else {
-        throw 'File data is not available for playback.';
+        throw 'No file data (bytes or path) available.';
       }
     } catch (e) {
+      _log('PLAYBACK ERROR for ${file.name}: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error playing file: $e')),
@@ -164,31 +202,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     });
   }
 
-  Future<void> _copyFiles() async {
-    if (_selectedFiles.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select files to copy first.')),
-      );
-      return;
-    }
-
-    if (!kIsWeb && _destinationPath == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a destination directory first.')),
-      );
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(kIsWeb 
-          ? 'Preparing ${_selectedFiles.length} files...' 
-          : 'Copying ${_selectedFiles.length} files to $_destinationPath...'),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -204,6 +217,11 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         ),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.description),
+            tooltip: 'Download Error Logs',
+            onPressed: _downloadLogs,
+          ),
           Center(child: Text('v$appVersion', style: const TextStyle(fontSize: 12, color: Colors.grey))),
           const SizedBox(width: 16),
           TextButton.icon(
@@ -216,16 +234,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             onPressed: _pickDestinationDirectory,
             icon: const Icon(Icons.folder_special),
             label: Text(kIsWeb ? 'Web Mode' : (_destinationPath == null ? 'Set Destination' : 'Dest: ${p.basename(_destinationPath!)}')),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton.icon(
-            onPressed: _copyFiles,
-            icon: const Icon(Icons.copy_all),
-            label: const Text('Copy Selected'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Theme.of(context).colorScheme.onPrimary,
-            ),
           ),
           const SizedBox(width: 16),
         ],

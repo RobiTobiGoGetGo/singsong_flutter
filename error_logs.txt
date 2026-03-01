@@ -1,0 +1,4 @@
+SingSong Error Logs
+-------------------
+Note: For the Web version, check the Browser Console (F12) for real-time logs.
+Last Deployment: v1.0.4+5
