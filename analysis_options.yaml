@@ -1,0 +1,11 @@
+#analysis_options.yaml
+
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # Customize your linter rules here
+    # For example:
+    # avoid_empty_else: false
+    # prefer_single_quotes: true
+    # prefer_const_constructors: true
