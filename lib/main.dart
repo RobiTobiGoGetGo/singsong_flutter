@@ -52,7 +52,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.10+11';
+  static const String appVersion = '1.0.11+12';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -184,7 +184,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           if (file.bytes != null) {
             // Extract Artwork using ID3 1.0.2
             try {
-              // Version 1.0.2 parses automatically on instantiation.
               MP3Instance mp3 = MP3Instance(file.bytes!);
               final meta = mp3.getMetaTags();
               if (meta != null && meta.containsKey('APIC')) {
@@ -210,7 +209,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             size: file.size,
             artwork: artwork,
             url: url,
-            path: file.path,
+            path: kIsWeb ? null : file.path, // FIXED: Do not access path on web
           ));
 
           setState(() {
@@ -224,7 +223,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         setState(() {
           _allFiles = loadedFiles;
           _isLoading = false;
-          if (!kIsWeb && result.files.first.path != null) {
+          if (!kIsWeb && result.files.isNotEmpty && result.files.first.path != null) {
             _savePath('sourcePath', p.dirname(result.files.first.path!));
           } else if (kIsWeb) {
             _sourcePath = 'Web Session';
