@@ -1,8 +1,0 @@
-PS C:\Users\robch\AndroidStudioProjects\singsong_flutter> project_type: app
-project_type: : Die Benennung "project_type:" wurde nicht als Name eines Cmdlet, einer Funktion, einer Skriptdatei oder eines ausführbaren Programms erkannt. Überprüfen Sie die
-Schreibweise des Namens, oder ob der Pfad korrekt ist (sofern enthalten), und wiederholen Sie den Vorgang.
-In Zeile:1 Zeichen:1
-+ project_type: app
-+ ~~~~~~~~~~~~~
-    + CategoryInfo          : ObjectNotFound: (project_type::String) [], CommandNotFoundException
-    + FullyQualifiedErrorId : CommandNotFoundException

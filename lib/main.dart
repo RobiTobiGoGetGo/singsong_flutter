@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 void main() {
   runApp(const SingSongApp());
@@ -73,22 +74,34 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   Future<void> _pickSourceFiles() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.audio,
+      type: FileType.custom,
+      allowedExtensions: ['mp3'],
       allowMultiple: true,
-      withData: true,
+      withData: true, // Required for Web to access file content
     );
 
     if (result != null) {
       setState(() {
         _allFiles = result.files.where((file) => file.name.toLowerCase().endsWith('.mp3')).toList();
+        
+        // On Web, file.path is null. We only save sourcePath if we have a path.
         if (result.files.isNotEmpty && result.files.first.path != null) {
           _savePath('sourcePath', p.dirname(result.files.first.path!));
+        } else if (kIsWeb) {
+          _sourcePath = 'Web Session';
         }
       });
     }
   }
 
   Future<void> _pickDestinationDirectory() async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Directory picking is not supported on Web. Files will be "downloaded" instead when copying.')),
+      );
+      return;
+    }
+    
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
     if (selectedDirectory != null) {
       _savePath('destinationPath', selectedDirectory);
@@ -128,7 +141,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       return;
     }
 
-    if (_destinationPath == null) {
+    if (!kIsWeb && _destinationPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a destination directory first.')),
       );
@@ -137,16 +150,19 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Copying ${_selectedFiles.length} files to $_destinationPath...'),
+        content: Text(kIsWeb 
+          ? 'Preparing ${_selectedFiles.length} files...' 
+          : 'Copying ${_selectedFiles.length} files to $_destinationPath...'),
         backgroundColor: Colors.green,
       ),
     );
+    
+    // Web implementation would typically involve triggering downloads for each file
+    // or creating a ZIP, as direct file system writing isn't available.
   }
 
   @override
   Widget build(BuildContext context) {
-    // Suppress unused field warning by referencing it or removing it.
-    // Since it's meant to be stored/displayed, I'll add it to the UI in a small way.
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -154,7 +170,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           children: [
             const Text('SingSong'),
             if (_sourcePath != null)
-              Text('Source: ${p.basename(_sourcePath!)}', style: const TextStyle(fontSize: 10)),
+              Text('Source: ${_sourcePath == "Web Session" ? _sourcePath : p.basename(_sourcePath!)}', 
+                   style: const TextStyle(fontSize: 10)),
           ],
         ),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
@@ -170,7 +187,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           TextButton.icon(
             onPressed: _pickDestinationDirectory,
             icon: const Icon(Icons.folder_special),
-            label: Text(_destinationPath == null ? 'Set Destination' : 'Dest: ${p.basename(_destinationPath!)}'),
+            label: Text(kIsWeb ? 'Web Mode' : (_destinationPath == null ? 'Set Destination' : 'Dest: ${p.basename(_destinationPath!)}')),
           ),
           const SizedBox(width: 8),
           ElevatedButton.icon(
@@ -199,7 +216,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                     child: Text('Source Library', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   ),
                   if (_allFiles.isEmpty)
-                    const Expanded(child: Center(child: Text('No MP3 files loaded. Click "Load MP3s".')))
+                    const Expanded(child: Center(child: Text('No MP3 files loaded. Click "Load MP3s" and select multiple files.')))
                   else
                     Expanded(
                       child: ListView.separated(
