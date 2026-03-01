@@ -1,10 +1,8 @@
 name: singsong_flutter
-
-description: Mr B's SingSing.
-
+description: "SingSong App"
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -12,24 +10,16 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_localizations:
-    sdk: flutter
-  cupertino_icons: ^1.0.2
-  shared_preferences: ^2.0.15
-  intl: ^0.20.2
-  share_plus: ^7.2.2
-  path_provider: ^2.0.11
+  cupertino_icons: ^1.0.8
+  file_picker: ^8.1.2
   audioplayers: ^5.2.1
-  pdf: ^3.10.4
-  printing: ^5.11.0
+  shared_preferences: ^2.2.2
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
-  generate: true
   uses-material-design: true
-  assets:
-    - images/

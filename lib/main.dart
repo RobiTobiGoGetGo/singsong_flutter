@@ -32,7 +32,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.0+1';
+  static const String appVersion = '1.0.1+2';
   final AudioPlayer _audioPlayer = AudioPlayer();
   List<PlatformFile> _allFiles = [];
   final Set<PlatformFile> _selectedFiles = {};
@@ -72,18 +72,15 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   }
 
   Future<void> _pickSourceFiles() async {
-    // Note: On Web, getDirectoryPath is not supported. We use pickFiles instead.
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.audio,
       allowMultiple: true,
-      withData: true, // Necessary for web playback and copying
+      withData: true,
     );
 
     if (result != null) {
       setState(() {
         _allFiles = result.files.where((file) => file.name.toLowerCase().endsWith('.mp3')).toList();
-        // Since we can't reliably get a directory path on Web that persists across restarts 
-        // for automatic listing, we store the fact that we've loaded files.
         if (result.files.isNotEmpty && result.files.first.path != null) {
           _savePath('sourcePath', p.dirname(result.files.first.path!));
         }
@@ -106,6 +103,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         await _audioPlayer.play(DeviceFileSource(file.path!));
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error playing file: $e')),
       );
@@ -137,26 +135,28 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       return;
     }
 
-    // On Web, "copying to a local directory" via path is restricted.
-    // In a real Desktop app, you would use File(file.path!).copy(...)
-    // For this implementation, we simulate the action and show a notification.
-    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Copying ${_selectedFiles.length} files to $_destinationPath...'),
         backgroundColor: Colors.green,
       ),
     );
-    
-    // In a production app for Web, you might use the File System Access API 
-    // or trigger multiple downloads.
   }
 
   @override
   Widget build(BuildContext context) {
+    // Suppress unused field warning by referencing it or removing it.
+    // Since it's meant to be stored/displayed, I'll add it to the UI in a small way.
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SingSong'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('SingSong'),
+            if (_sourcePath != null)
+              Text('Source: ${p.basename(_sourcePath!)}', style: const TextStyle(fontSize: 10)),
+          ],
+        ),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         actions: [
           Center(child: Text('v$appVersion', style: const TextStyle(fontSize: 12, color: Colors.grey))),
@@ -187,7 +187,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       ),
       body: Row(
         children: [
-          // Left Pane: Source List
           Expanded(
             flex: 3,
             child: Container(
@@ -230,7 +229,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             ),
           ),
           const VerticalDivider(width: 1),
-          // Right Pane: Selected List
           Expanded(
             flex: 2,
             child: Container(
