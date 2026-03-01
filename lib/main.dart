@@ -33,7 +33,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.3+4';
+  static const String appVersion = '1.0.4+5';
   final AudioPlayer _audioPlayer = AudioPlayer();
   List<PlatformFile> _allFiles = [];
   final Set<PlatformFile> _selectedFiles = {};
@@ -74,25 +74,35 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   Future<void> _pickSourceFiles() async {
     try {
+      // Clear existing files to provide immediate feedback
+      setState(() {
+        _allFiles = [];
+      });
+
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
+        type: FileType.custom,
+        allowedExtensions: ['mp3'],
         allowMultiple: true,
-        withData: true, 
+        withData: true, // Crucial for Web
       );
 
-      if (result != null) {
-        final mp3Files = result.files.where((file) => file.name.toLowerCase().endsWith('.mp3')).toList();
+      if (result != null && result.files.isNotEmpty) {
+        // Filter for MP3s just in case the OS picker didn't respect allowedExtensions
+        final mp3Files = result.files.where((file) {
+          final name = file.name.toLowerCase();
+          return name.endsWith('.mp3');
+        }).toList();
         
         setState(() {
           _allFiles = mp3Files;
-          if (result.files.isNotEmpty && result.files.first.path != null) {
+          if (!kIsWeb && result.files.first.path != null) {
             _savePath('sourcePath', p.dirname(result.files.first.path!));
           } else if (kIsWeb) {
             _sourcePath = 'Web Session';
           }
         });
 
-        if (mp3Files.isEmpty && result.files.isNotEmpty) {
+        if (mp3Files.isEmpty) {
            ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Selected ${result.files.length} files, but none were recognized as .mp3')),
           );
@@ -101,6 +111,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             SnackBar(content: Text('Successfully loaded ${mp3Files.length} MP3 files.')),
           );
         }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No files were selected.')),
+        );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -129,6 +143,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         await _audioPlayer.play(BytesSource(file.bytes!));
       } else if (file.path != null) {
         await _audioPlayer.play(DeviceFileSource(file.path!));
+      } else {
+        throw 'File data is not available for playback.';
       }
     } catch (e) {
       if (!mounted) return;
