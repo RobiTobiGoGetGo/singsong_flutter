@@ -71022,7 +71022,7 @@ ao(){return new A.As(A.asO(),B.dz,A.d([],t._o),A.aJ(t.n_),A.d([],t.s))}}
 A.As.prototype={
 ap(){var s,r=this
 r.aS()
-r.iL("App started v1.0.12+13")
+r.iL("App started v1.0.13+14")
 r.rT()
 s=r.d.ay
 new A.bQ(s,A.o(s).h("bQ<1>")).jd(new A.adn(r))},
@@ -71063,19 +71063,19 @@ break
 case 5:return A.G(null,r)
 case 1:return A.F(p.at(-1),r)}})
 return A.H($async$rT,r)},
-oW(){var s=0,r=A.I(t.H),q=1,p=[],o=this,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3,a4,a5,a6
-var $async$oW=A.J(function(a8,a9){if(a8===1){p.push(a9)
-s=q}for(;;)switch(s){case 0:o.iL("Attempting to pick files with background loading...")
+oW(){var s=0,r=A.I(t.H),q=1,p=[],o=this,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3,a4,a5,a6,a7
+var $async$oW=A.J(function(a9,b0){if(a9===1){p.push(b0)
+s=q}for(;;)switch(s){case 0:o.iL("Attempting to pick files with artwork extraction...")
 q=3
 s=6
 return A.N($.akE.aM().vJ(!0,A.d(["mp3"],t.s),B.l3,!0),$async$oW)
-case 6:n=a9
+case 6:n=b0
 s=n!=null&&J.ot(n.a)?7:8
 break
 case 7:o.ai(new A.adb(o))
 o.G9()
 m=J.cc(n.a)
-l=0,a=t.N,a0=t.z,a1=t.Cm,a2=t.H3
+l=0,a0=t.N,a1=t.z,a2=t.Cm,a3=t.H3
 case 9:if(!(l<m)){s=11
 break}k=J.bn(n.a,l)
 if(!B.d.Bp(k.b.toLowerCase(),".mp3")){new A.adc(o,l,m).$0()
@@ -71083,41 +71083,42 @@ o.c.dH()
 s=10
 break}j=null
 i=null
-if(k.c!=null){try{a3=k.c
-a3.toString
-a4=new A.Yd(A.v(a,a0))
-a4.a=a3
-h=a4
+if(k.c!=null){try{a4=k.c
+a4.toString
+a5=new A.Yd(A.v(a0,a1))
+a5.a=a4
+h=a5
 g=h.b
 if(g!=null&&J.os(g,"APIC")){f=J.bn(g,"APIC")
-if(a2.b(f))j=f
-else if(a1.b(f))j=new Uint8Array(A.jZ(f))}}catch(a7){e=A.ad(a7)
-o.iL("Metadata extraction failed for "+k.b+": "+A.l(e))}a3=k.c
-a3.toString
-d=A.ajJ([a3],null)
-a3=(self.URL||self.webkitURL).createObjectURL(d)
-a3.toString
-i=a3}c=new A.mK(k.b,k.e,j,i,null)
-new A.add(o,c,l,m).$0()
+if(a3.b(f))j=f
+else if(a2.b(f))j=new Uint8Array(A.jZ(f))}}catch(a8){e=A.ad(a8)
+o.iL("Metadata extraction failed for "+k.b+": "+A.l(e))}a4=k.c
+a4.toString
+d=A.ajJ([a4],null)
+a4=(self.URL||self.webkitURL).createObjectURL(d)
+a4.toString
+i=a4}c=null
+b=new A.mK(k.b,k.e,j,i,c)
+new A.add(o,b,l,m).$0()
 o.c.dH()
 s=B.c.b8(l,10)===0?12:13
 break
 case 12:s=14
-return A.N(A.uS(B.Ap,null,a0),$async$oW)
+return A.N(A.uS(B.Ap,null,a1),$async$oW)
 case 14:case 13:case 10:++l
 s=9
 break
 case 11:o.ai(new A.ade(o))
-o.iL("Loaded "+o.r.length+" MP3 files with artwork.")
+o.iL("Loaded "+o.r.length+" MP3 files.")
 case 8:q=1
 s=5
 break
 case 3:q=2
-a6=p.pop()
-b=A.ad(a6)
+a7=p.pop()
+a=A.ad(a7)
 o.ai(new A.adf(o))
-o.iL("CRITICAL ERROR picking files: "+A.l(b))
-o.c.a9(t.Pu).f.wH(A.ahA(null,null,null,null,null,B.ad,null,A.jB("Error picking files: "+A.l(b),null,null,null),null,B.hs,null,null,null,null,null,null,null,null,null,null))
+o.iL("CRITICAL ERROR picking files: "+A.l(a))
+o.c.a9(t.Pu).f.wH(A.ahA(null,null,null,null,null,B.ad,null,A.jB("Error picking files: "+A.l(a),null,null,null),null,B.hs,null,null,null,null,null,null,null,null,null,null))
 s=5
 break
 case 2:s=1
@@ -71189,7 +71190,7 @@ g=A.tK(g,B.aC,B.am)
 f=A.ah(a).ax
 s=f.d
 f=s==null?f.b:s
-s=A.d([A.agS(i,i,B.Bj,i,i,j.gXS(),i,i,"Download Error Logs"),A.ty(A.jB("v1.0.12+13",i,i,B.M_),i,i),B.jg,A.amF(B.Bl,B.OJ,j.ga2h()),B.PG,A.amF(B.Bh,A.jB("Web Mode",i,i,i),j.ga2g()),B.jg],h)
+s=A.d([A.agS(i,i,B.Bj,i,i,j.gXS(),i,i,"Download Error Logs"),A.ty(A.jB("v1.0.13+14",i,i,B.M_),i,i),B.jg,A.amF(B.Bl,B.OJ,j.ga2h()),B.PG,A.amF(B.Bh,A.jB("Web Mode",i,i,i),j.ga2g()),B.jg],h)
 r=j.Q?new A.Ga(new A.vp(j.as,A.b4(B.c.aA(76.5),B.j.F()>>>16&255,B.j.F()>>>8&255,B.j.F()&255),B.eo,i,i,i,i),B.JB,i):i
 q=r==null?i:r.d.b
 p=q==null?0:q

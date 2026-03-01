@@ -52,7 +52,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.12+13';
+  static const String appVersion = '1.0.13+14';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -150,7 +150,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   }
 
   Future<void> _pickSourceFiles() async {
-    _log('Attempting to pick files with background loading...');
+    _log('Attempting to pick files with artwork extraction...');
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -161,7 +161,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
       if (result != null && result.files.isNotEmpty) {
         setState(() {
-          _allFiles = []; // Start fresh
+          _allFiles = []; 
           _isLoading = true;
           _loadingProgress = 0.0;
         });
@@ -204,13 +204,20 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             }
           }
 
-          // Use kIsWeb check to safely access file properties
+          // EXTREMELY STRICT path avoidance for Web
+          String? filePath;
+          if (!kIsWeb) {
+            try {
+              filePath = file.path;
+            } catch (_) {}
+          }
+
           final mp3File = MP3File(
             name: file.name,
             size: file.size,
             artwork: artwork,
             url: url,
-            path: kIsWeb ? null : file.path,
+            path: filePath,
           );
 
           setState(() {
@@ -218,7 +225,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             _loadingProgress = (i + 1) / totalFiles;
           });
           
-          // Give UI time to update every few files
           if (i % 10 == 0) {
             await Future.delayed(const Duration(milliseconds: 1));
           }
@@ -227,16 +233,19 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         setState(() {
           _isLoading = false;
           if (!kIsWeb && result.files.isNotEmpty) {
-            final firstPath = result.files.first.path;
-            if (firstPath != null) {
-              _savePath('sourcePath', p.dirname(firstPath));
-            }
+            // Safe access only on non-web
+            try {
+               final firstPath = result.files.first.path;
+               if (firstPath != null) {
+                 _savePath('sourcePath', p.dirname(firstPath));
+               }
+            } catch (_) {}
           } else if (kIsWeb) {
             _sourcePath = 'Web Session';
           }
         });
 
-        _log('Loaded ${_allFiles.length} MP3 files with artwork.');
+        _log('Loaded ${_allFiles.length} MP3 files.');
       }
     } catch (e) {
       setState(() {
