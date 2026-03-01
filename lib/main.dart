@@ -37,6 +37,9 @@ class SingSongHomePage extends StatefulWidget {
 class _SingSongHomePageState extends State<SingSongHomePage> {
   static const String appVersion = '1.0.6+7';
   final AudioPlayer _audioPlayer = AudioPlayer();
+  PlayerState _playerState = PlayerState.stopped;
+  PlatformFile? _currentFile;
+  
   List<PlatformFile> _allFiles = [];
   final Set<PlatformFile> _selectedFiles = {};
   String? _sourcePath;
@@ -49,6 +52,14 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     super.initState();
     _log('App started v$appVersion');
     _loadStoredPaths();
+    
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      if (mounted) {
+        setState(() {
+          _playerState = state;
+        });
+      }
+    });
   }
 
   @override
@@ -180,9 +191,24 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     }
   }
 
-  void _playFile(PlatformFile file) async {
+  void _handlePlayback(PlatformFile file) async {
+    if (_currentFile == file && _playerState == PlayerState.playing) {
+      await _audioPlayer.pause();
+      return;
+    }
+    
+    if (_currentFile == file && _playerState == PlayerState.paused) {
+      await _audioPlayer.resume();
+      return;
+    }
+
+    // New file or stopped
     _log('Attempting to play: ${file.name} (Size: ${file.size} bytes)');
     try {
+      setState(() {
+        _currentFile = file;
+      });
+      
       if (kIsWeb && file.bytes != null) {
         _log('Playing via Blob URL (Web fix)...');
         _cleanupWebUrl();
@@ -205,6 +231,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         SnackBar(content: Text('Error playing file: $e')),
       );
     }
+  }
+
+  void _stopPlayback() async {
+    await _audioPlayer.stop();
   }
 
   void _toggleSelection(PlatformFile file) {
@@ -276,16 +306,29 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                         itemBuilder: (context, index) {
                           final file = _allFiles[index];
                           final isSelected = _selectedFiles.contains(file);
+                          final isCurrent = _currentFile == file;
+                          final isPlaying = isCurrent && _playerState == PlayerState.playing;
+                          
                           return ListTile(
                             leading: Checkbox(
                               value: isSelected,
                               onChanged: (_) => _toggleSelection(file),
                             ),
-                            title: Text(file.name),
+                            title: Text(file.name, style: TextStyle(fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal, color: isCurrent ? Colors.blue : null)),
                             subtitle: Text('${(file.size / 1024 / 1024).toStringAsFixed(2)} MB'),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.play_circle_fill, color: Colors.blue, size: 32),
-                              onPressed: () => _playFile(file),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isCurrent && _playerState != PlayerState.stopped)
+                                  IconButton(
+                                    icon: const Icon(Icons.stop_circle, color: Colors.red),
+                                    onPressed: _stopPlayback,
+                                  ),
+                                IconButton(
+                                  icon: Icon(isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, color: Colors.blue, size: 32),
+                                  onPressed: () => _handlePlayback(file),
+                                ),
+                              ],
                             ),
                             onTap: () => _toggleSelection(file),
                           );

@@ -1,7 +1,0 @@
-2026-03-01 11:02:18.236: App started v1.0.5+6
-2026-03-01 11:02:18.252: Loaded paths: source=null, dest=null
-2026-03-01 11:02:21.629: Attempting to pick files...
-2026-03-01 11:02:28.630: Selected 1 total files. Found 1 MP3s.
-2026-03-01 11:02:30.535: Attempting to play: 2014 - Now is the Hour.mp3 (Size: 5315146 bytes)
-2026-03-01 11:02:30.535: Playing from bytes...
-2026-03-01 11:02:30.535: PLAYBACK ERROR for 2014 - Now is the Hour.mp3: UnimplementedError
