@@ -3,7 +3,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, Uint8List;
+import 'package:id3/id3.dart';
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 
@@ -27,6 +28,22 @@ class SingSongApp extends StatelessWidget {
   }
 }
 
+class MP3File {
+  final String name;
+  final int size;
+  final Uint8List? artwork;
+  final String? url; // Blob URL for web playback
+  final String? path; // File path for desktop playback
+
+  MP3File({
+    required this.name,
+    required this.size,
+    this.artwork,
+    this.url,
+    this.path,
+  });
+}
+
 class SingSongHomePage extends StatefulWidget {
   const SingSongHomePage({super.key});
 
@@ -35,17 +52,16 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.8+9';
+  static const String appVersion = '1.0.9+10';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
-  PlatformFile? _currentFile;
+  MP3File? _currentFile;
   
-  List<PlatformFile> _allFiles = [];
-  final Set<PlatformFile> _selectedFiles = {};
+  List<MP3File> _allFiles = [];
+  final Set<MP3File> _selectedFiles = {};
   String? _sourcePath;
   String? _destinationPath;
   final List<String> _logs = [];
-  String? _currentWebUrl;
 
   @override
   void initState() {
@@ -64,15 +80,18 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   @override
   void dispose() {
-    _cleanupWebUrl();
+    _cleanupWebUrls();
     _audioPlayer.dispose();
     super.dispose();
   }
 
-  void _cleanupWebUrl() {
-    if (_currentWebUrl != null) {
-      html.Url.revokeObjectUrl(_currentWebUrl!);
-      _currentWebUrl = null;
+  void _cleanupWebUrls() {
+    if (kIsWeb) {
+      for (var file in _allFiles) {
+        if (file.url != null) {
+          html.Url.revokeObjectUrl(file.url!);
+        }
+      }
     }
   }
 
@@ -127,29 +146,60 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   }
 
   Future<void> _pickSourceFiles() async {
-    _log('Attempting to pick files...');
+    _log('Attempting to pick files with artwork extraction...');
     try {
-      setState(() {
-        _allFiles = [];
-      });
-
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['mp3'],
         allowMultiple: true,
-        withData: kIsWeb, // Required for Web to keep data access
+        withData: true, 
       );
 
       if (result != null && result.files.isNotEmpty) {
-        final mp3Files = result.files.where((file) {
-          final name = file.name.toLowerCase();
-          return name.endsWith('.mp3');
-        }).toList();
+        _cleanupWebUrls();
+        List<MP3File> loadedFiles = [];
         
-        _log('Indexed ${mp3Files.length} MP3 files.');
+        for (var file in result.files) {
+          if (!file.name.toLowerCase().endsWith('.mp3')) continue;
+
+          Uint8List? artwork;
+          String? url;
+
+          if (file.bytes != null) {
+            // Extract Artwork using ID3 1.0.2
+            try {
+              // Version 1.0.2 parses automatically on instantiation.
+              MP3Instance mp3 = MP3Instance(file.bytes!);
+              final meta = mp3.getMetaTags();
+              if (meta != null && meta.containsKey('APIC')) {
+                final apic = meta['APIC'];
+                if (apic is Uint8List) {
+                  artwork = apic;
+                } else if (apic is List<int>) {
+                  artwork = Uint8List.fromList(apic);
+                }
+              }
+            } catch (e) {
+              _log('Metadata extraction failed for ${file.name}: $e');
+            }
+
+            if (kIsWeb) {
+              final blob = html.Blob([file.bytes!]);
+              url = html.Url.createObjectUrlFromBlob(blob);
+            }
+          }
+
+          loadedFiles.add(MP3File(
+            name: file.name,
+            size: file.size,
+            artwork: artwork,
+            url: url,
+            path: file.path,
+          ));
+        }
 
         setState(() {
-          _allFiles = mp3Files;
+          _allFiles = loadedFiles;
           if (!kIsWeb && result.files.first.path != null) {
             _savePath('sourcePath', p.dirname(result.files.first.path!));
           } else if (kIsWeb) {
@@ -157,13 +207,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           }
         });
 
-        if (mp3Files.isEmpty) {
-           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Selected ${result.files.length} files, but none were recognized as .mp3')),
-          );
-        }
-      } else {
-        _log('File picker cancelled or no files selected.');
+        _log('Loaded ${loadedFiles.length} MP3 files with artwork.');
       }
     } catch (e) {
       _log('CRITICAL ERROR picking files: $e');
@@ -191,7 +235,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     }
   }
 
-  void _handlePlayback(PlatformFile file) async {
+  void _handlePlayback(MP3File file) async {
     if (_currentFile == file && _playerState == PlayerState.playing) {
       await _audioPlayer.pause();
       return;
@@ -202,29 +246,21 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       return;
     }
 
-    _log('Attempting playback for: ${file.name}');
+    _log('Playing: ${file.name}');
     try {
       setState(() {
         _currentFile = file;
       });
       
-      if (kIsWeb && file.bytes != null) {
-        _log('Playing via Blob URL (Web fix)...');
-        _cleanupWebUrl();
-        final blob = html.Blob([file.bytes!]);
-        _currentWebUrl = html.Url.createObjectUrlFromBlob(blob);
-        await _audioPlayer.play(UrlSource(_currentWebUrl!));
-      } else if (file.bytes != null) {
-        _log('Playing from bytes...');
-        await _audioPlayer.play(BytesSource(file.bytes!));
+      if (kIsWeb && file.url != null) {
+        await _audioPlayer.play(UrlSource(file.url!));
       } else if (file.path != null) {
-        _log('Playing from path: ${file.path}');
         await _audioPlayer.play(DeviceFileSource(file.path!));
       } else {
-        throw 'File content not available.';
+        throw 'No playback source available.';
       }
     } catch (e) {
-      _log('PLAYBACK ERROR for ${file.name}: $e');
+      _log('PLAYBACK ERROR: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error playing file: $e')),
@@ -236,7 +272,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     await _audioPlayer.stop();
   }
 
-  void _toggleSelection(PlatformFile file) {
+  void _toggleSelection(MP3File file) {
     setState(() {
       if (_selectedFiles.contains(file)) {
         _selectedFiles.remove(file);
@@ -287,63 +323,125 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           Expanded(
             flex: 3,
             child: Container(
-              color: Colors.grey[50],
+              color: Colors.grey[100],
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Padding(
                     padding: EdgeInsets.all(16.0),
-                    child: Text('Source Library', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    child: Text('Source Library (Extra Large Symbols)', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   ),
                   if (_allFiles.isEmpty)
-                    const Expanded(child: Center(child: Text('No MP3 files loaded. Click "Load MP3s" and select multiple files.')))
+                    const Expanded(child: Center(child: Text('No MP3 files loaded. Click "Load MP3s".')))
                   else
                     Expanded(
-                      child: ListView.separated(
+                      child: GridView.builder(
+                        padding: const EdgeInsets.all(16),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 200,
+                          childAspectRatio: 0.8,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
                         itemCount: _allFiles.length,
-                        separatorBuilder: (context, index) => const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final file = _allFiles[index];
                           final isSelected = _selectedFiles.contains(file);
                           final isCurrent = _currentFile == file;
                           final isPlaying = isCurrent && _playerState == PlayerState.playing;
-                          
-                          return ListTile(
-                            leading: Checkbox(
-                              value: isSelected,
-                              onChanged: (_) => _toggleSelection(file),
-                            ),
-                            title: Row(
-                              children: [
-                                const Icon(Icons.audiotrack, size: 16, color: Colors.grey),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(file.name, 
-                                    style: TextStyle(
-                                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal, 
-                                      color: isCurrent ? Colors.blue : null
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            subtitle: Text('${(file.size / 1024 / 1024).toStringAsFixed(2)} MB'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (isCurrent && _playerState != PlayerState.stopped)
-                                  IconButton(
-                                    icon: const Icon(Icons.stop_circle, color: Colors.red),
-                                    onPressed: _stopPlayback,
-                                  ),
-                                IconButton(
-                                  icon: Icon(isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, color: Colors.blue, size: 32),
-                                  onPressed: () => _handlePlayback(file),
-                                ),
-                              ],
-                            ),
+
+                          return GestureDetector(
                             onTap: () => _toggleSelection(file),
+                            child: Card(
+                              clipBehavior: Clip.antiAlias,
+                              color: isSelected ? Colors.blue[50] : null,
+                              shape: RoundedRectangleBorder(
+                                side: BorderSide(
+                                  color: isSelected ? Colors.blue : Colors.transparent,
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              elevation: isSelected ? 4 : 1,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Expanded(
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        if (file.artwork != null)
+                                          Image.memory(file.artwork!, fit: BoxFit.cover)
+                                        else
+                                          Container(
+                                            color: Colors.grey[300],
+                                            child: const Icon(Icons.music_note, size: 64, color: Colors.grey),
+                                          ),
+                                        if (isSelected)
+                                          Positioned(
+                                            top: 4,
+                                            left: 4,
+                                            child: Icon(Icons.check_circle, color: Colors.blue[700]),
+                                          ),
+                                        Positioned(
+                                          bottom: 4,
+                                          right: 4,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (isCurrent && _playerState != PlayerState.stopped)
+                                                GestureDetector(
+                                                  onTap: _stopPlayback,
+                                                  child: Container(
+                                                    padding: const EdgeInsets.all(4),
+                                                    decoration: const BoxDecoration(color: Colors.white70, shape: BoxShape.circle),
+                                                    child: const Icon(Icons.stop, color: Colors.red, size: 20),
+                                                  ),
+                                                ),
+                                              const SizedBox(width: 4),
+                                              GestureDetector(
+                                                onTap: () => _handlePlayback(file),
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(4),
+                                                  decoration: const BoxDecoration(color: Colors.white70, shape: BoxShape.circle),
+                                                  child: Icon(
+                                                    isPlaying ? Icons.pause : Icons.play_arrow,
+                                                    color: Colors.blue,
+                                                    size: 24,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          file.name,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                                            color: isCurrent ? Colors.blue : null,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${(file.size / 1024 / 1024).toStringAsFixed(1)} MB',
+                                          style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           );
                         },
                       ),
@@ -371,13 +469,15 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                     ),
                   ),
                   if (_selectedFiles.isEmpty)
-                    const Expanded(child: Center(child: Text('Select files from the left to add them here.')))
+                    const Expanded(child: Center(child: Text('Select files from the left.')))
                   else
                     Expanded(
                       child: ListView(
                         children: _selectedFiles.map((file) => ListTile(
-                          leading: const Icon(Icons.audiotrack, color: Colors.orange),
-                          title: Text(file.name, style: const TextStyle(fontSize: 14)),
+                          leading: file.artwork != null 
+                              ? Image.memory(file.artwork!, width: 40, height: 40, fit: BoxFit.cover)
+                              : const Icon(Icons.audiotrack, color: Colors.orange),
+                          title: Text(file.name, style: const TextStyle(fontSize: 12)),
                           trailing: IconButton(
                             icon: const Icon(Icons.close, size: 20),
                             onPressed: () => _toggleSelection(file),

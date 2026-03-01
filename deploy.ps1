@@ -2,7 +2,7 @@
 Write-Host "CLEANING AND BUILDING..." -ForegroundColor Yellow
 flutter clean
 flutter pub get
-flutter build web --base-href "/singsong_flutter/"
+flutter build web --base-href "/singsong_flutter/" --no-wasm-dry-run
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "BUILD FAILED!" -ForegroundColor Red
@@ -27,7 +27,7 @@ Copy-Item -Path "build/web/*" -Destination "." -Recurse -Force
 
 Write-Host "PUSHING TO GITHUB..." -ForegroundColor Yellow
 git add .
-git commit -m "Auto-Release v1.0.8+9"
+git commit -m "Auto-Release v1.0.9+10"
 git push origin main:gh-pages --force
 
-Write-Host "SUCCESS! v1.0.8+9 is now on GitHub." -ForegroundColor Green
+Write-Host "SUCCESS! v1.0.9+10 is now on GitHub." -ForegroundColor Green

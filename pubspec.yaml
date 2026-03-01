@@ -2,7 +2,7 @@ name: singsong_flutter
 description: "SingSong App"
 publish_to: 'none'
 
-version: 1.0.8+9
+version: 1.0.9+10
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -15,6 +15,7 @@ dependencies:
   audioplayers: ^5.2.1
   shared_preferences: ^2.2.2
   path: ^1.9.0
+  id3: ^1.0.2
 
 dev_dependencies:
   flutter_test:
