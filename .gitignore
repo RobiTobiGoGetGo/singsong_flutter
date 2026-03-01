@@ -1,17 +1,63 @@
-# Flutter/Dart specific
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
 .DS_Store
-build/
+.atom/
+.buildlog/
+.history
+.svn/
+
+# IntelliJ
+.idea/
+*.iml
+
+# Flutter
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
-pubspec.lock
-# IDE specific
-.idea/
-*.iml
-*.ipr
-*.iws
-# Miscellaneous
-*.log
-*.tmp
-*.swp
-*.swo
+.pub-cache/
+.pub/
+/build/
+
+# Android
+/android/app/src/main/assets/flutter_assets/
+/android/key.properties
+/android/local.properties
+
+# iOS
+/ios/Flutter/App.framework
+/ios/Flutter/Debug-iphoneos
+/ios/Flutter/Release-iphoneos
+/ios/Flutter/engine
+/ios/Flutter/flutter_assets
+/ios/Flutter/app.flx
+/ios/Flutter/snapshot_blob.bin
+/ios/Flutter/vm_snapshot_data
+/ios/Runner/GeneratedPluginRegistrant.h
+/ios/Runner/GeneratedPluginRegistrant.m
+/ios/Runner.xcworkspace/contents.xcworkspacedata
+/ios/Runner.xcworkspace/xcshareddata/
+/ios/Runner.xcodeproj/project.xcworkspace/
+/ios/Runner.xcodeproj/xcshareddata/
+
+# Linux
+/linux/flutter/ephemeral
+
+# macOS
+/macos/Flutter/ephemeral
+
+# Windows
+/windows/flutter/ephemeral
+/windows/runner/Debug/
+/windows/runner/Release/
+/windows/runner/Profile/
+/windows/flutter/flutter_assemble.h
+/windows/flutter/flutter_plugin_registrar.h
+/windows/flutter/flutter_wrapper_app.h
+/windows/flutter/flutter_wrapper_plugin.h
+/windows/flutter/flutter_wrapper_proc_address_table.h
+
+# Build artifacts
+.dart_tool/
