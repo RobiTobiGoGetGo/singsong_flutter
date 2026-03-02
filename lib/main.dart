@@ -52,7 +52,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.13+14';
+  static const String appVersion = '1.0.14+15';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -238,10 +238,14 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       
       if (kIsWeb && file.url != null) {
         await _audioPlayer.play(UrlSource(file.url!));
-      } else if (!kIsWeb && file.rawFile.path != null) {
-        await _audioPlayer.play(DeviceFileSource(file.rawFile.path!));
-      } else if (file.rawFile.bytes != null) {
-        await _audioPlayer.play(BytesSource(file.rawFile.bytes!));
+      } else if (!kIsWeb) {
+        // Only access path on non-web
+        final filePath = file.rawFile.path;
+        if (filePath != null) {
+          await _audioPlayer.play(DeviceFileSource(filePath));
+        } else if (file.rawFile.bytes != null) {
+          await _audioPlayer.play(BytesSource(file.rawFile.bytes!));
+        }
       } else {
         throw 'No playback source available.';
       }
