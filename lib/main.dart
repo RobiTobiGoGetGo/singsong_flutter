@@ -33,12 +33,14 @@ class MP3File {
   final int size;
   Uint8List? artwork;
   String? url; 
-  final PlatformFile rawFile;
+  final dynamic webFile; // Stores html.File on web
+  final String? desktopPath;
 
   MP3File({
     required this.name,
     required this.size,
-    required this.rawFile,
+    this.webFile,
+    this.desktopPath,
     this.artwork,
     this.url,
   });
@@ -52,7 +54,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.16+17';
+  static const String appVersion = '1.0.17+18';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -111,30 +113,55 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   }
 
   Future<void> _pickSourceFiles() async {
-    _log('Picking files...');
-    try {
+    _log('Initiating file selection...');
+    
+    if (kIsWeb) {
+      final input = html.FileUploadInputElement()..multiple = true..accept = '.mp3';
+      input.click();
+
+      input.onChange.listen((event) async {
+        final files = input.files;
+        if (files == null || files.isEmpty) return;
+
+        _cleanupWebUrls();
+        _log('Selected ${files.length} files. Populating grid instantly...');
+
+        List<MP3File> initialFiles = [];
+        for (var file in files) {
+          if (file.name.toLowerCase().endsWith('.mp3')) {
+            initialFiles.add(MP3File(
+              name: file.name,
+              size: file.size,
+              webFile: file,
+            ));
+          }
+        }
+
+        setState(() {
+          _allFiles = initialFiles;
+          _totalFiles = initialFiles.length;
+          _filesProcessed = 0;
+          _isLoading = true;
+        });
+
+        // Background processing
+        _processWebFiles(initialFiles);
+      });
+    } else {
+      // Desktop Fallback
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['mp3'],
         allowMultiple: true,
-        withData: true, 
       );
 
       if (result == null || result.files.isEmpty) return;
 
-      _cleanupWebUrls();
-      
-      // PHASE 1: Add filenames immediately
-      List<MP3File> initialFiles = [];
-      for (var file in result.files) {
-        if (file.name.toLowerCase().endsWith('.mp3')) {
-          initialFiles.add(MP3File(
-            name: file.name,
-            size: file.size,
-            rawFile: file,
-          ));
-        }
-      }
+      List<MP3File> initialFiles = result.files.map((f) => MP3File(
+        name: f.name,
+        size: f.size,
+        desktopPath: f.path,
+      )).toList();
 
       setState(() {
         _allFiles = initialFiles;
@@ -143,56 +170,50 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         _isLoading = true;
       });
 
-      _log('PHASE 1 Complete: ${initialFiles.length} names added.');
-
-      // CRITICAL: Delay to allow UI to render the grid of names before starting background work
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      // PHASE 2: Background Artwork extraction
-      _processFiles(initialFiles);
-
-    } catch (e) {
-      _log('CRITICAL ERROR during selection: $e');
+      // Background processing for desktop could be added here
       setState(() { _isLoading = false; });
     }
   }
 
-  Future<void> _processFiles(List<MP3File> files) async {
+  Future<void> _processWebFiles(List<MP3File> files) async {
     for (int i = 0; i < files.length; i++) {
-      final file = files[i];
-      try {
-        if (file.rawFile.bytes != null) {
-          // Extract Artwork
-          final mp3 = MP3Instance(file.rawFile.bytes!);
-          final meta = mp3.getMetaTags();
-          if (meta != null && meta.containsKey('APIC')) {
-            final apic = meta['APIC'];
-            if (apic is Uint8List) {
-              file.artwork = apic;
-            } else if (apic is List<int>) {
-              file.artwork = Uint8List.fromList(apic);
-            }
-          }
+      final mp3File = files[i];
+      final html.File file = mp3File.webFile;
 
-          // Create Playback URL
-          if (kIsWeb) {
-            final blob = html.Blob([file.rawFile.bytes!]);
-            file.url = html.Url.createObjectUrlFromBlob(blob);
+      try {
+        final reader = html.FileReader();
+        reader.readAsArrayBuffer(file);
+        await reader.onLoadEnd.first;
+        final Uint8List bytes = reader.result as Uint8List;
+
+        // Extract Artwork
+        final id3 = MP3Instance(bytes);
+        final meta = id3.getMetaTags();
+        if (meta != null && meta.containsKey('APIC')) {
+          final apic = meta['APIC'];
+          if (apic is Uint8List) {
+            mp3File.artwork = apic;
+          } else if (apic is List<int>) {
+            mp3File.artwork = Uint8List.fromList(apic);
           }
         }
+
+        // Create playback URL
+        final blob = html.Blob([bytes]);
+        mp3File.url = html.Url.createObjectUrlFromBlob(blob);
+
       } catch (e) {
-        _log('Error processing ${file.name}: $e');
+        _log('Error processing ${mp3File.name}: $e');
       }
 
-      // Update progress every 10 files or at the end
       if (i % 10 == 0 || i == files.length - 1) {
+        if (!mounted) return;
         setState(() { _filesProcessed = i + 1; });
-        // Yield to allow browser to repaint icons
         await Future.delayed(const Duration(milliseconds: 1));
       }
     }
-    setState(() { _isLoading = false; });
-    _log('PHASE 2 Complete: All files processed.');
+    if (mounted) setState(() { _isLoading = false; });
+    _log('Background processing complete.');
   }
 
   void _handlePlayback(MP3File file) async {
@@ -210,17 +231,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       setState(() { _currentFile = file; });
       if (kIsWeb && file.url != null) {
         await _audioPlayer.play(UrlSource(file.url!));
-      } else if (!kIsWeb) {
-        // Safe access to path ONLY on non-web
-        String? path;
-        try { path = file.rawFile.path; } catch (_) {}
-        if (path != null) {
-          await _audioPlayer.play(DeviceFileSource(path));
-        } else if (file.rawFile.bytes != null) {
-          await _audioPlayer.play(BytesSource(file.rawFile.bytes!));
-        }
-      } else if (file.rawFile.bytes != null) {
-        await _audioPlayer.play(BytesSource(file.rawFile.bytes!));
+      } else if (!kIsWeb && file.desktopPath != null) {
+        await _audioPlayer.play(DeviceFileSource(file.desktopPath!));
       }
     } catch (e) { _log('PLAYBACK ERROR: $e'); }
   }
@@ -268,7 +280,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                       const Icon(Icons.sync, color: Colors.blue),
                       const SizedBox(width: 12),
                       Text(
-                        'Processing Artwork: $_filesProcessed / $_totalFiles Files (${((_filesProcessed / _totalFiles) * 100).toInt()}%)',
+                        'Processing: $_filesProcessed / $_totalFiles Files (${((_filesProcessed / _totalFiles) * 100).toInt()}%)',
                         style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
                       ),
                     ],

@@ -1,4 +1,0 @@
-2026-03-01 16:20:39.429: Attempting to pick files with artwork extraction...
-2026-03-01 16:20:55.858: CRITICAL ERROR picking files:       On web `path` is unavailable and accessing it causes this exception.
-      You should access `bytes` property instead,
-      Read more about it [here](https://github.com/miguelpruivo/flutter_file_picker/wiki/FAQ)
