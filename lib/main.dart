@@ -54,13 +54,14 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.17+18';
+  static const String appVersion = '1.0.18+19';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
   
   List<MP3File> _allFiles = [];
   final Set<MP3File> _selectedFiles = {};
+  String? _destinationPath;
   final List<String> _logs = [];
   
   bool _isLoading = false;
@@ -71,6 +72,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   void initState() {
     super.initState();
     _log('App started v$appVersion');
+    _loadStoredPaths();
     
     _audioPlayer.onPlayerStateChanged.listen((state) {
       if (mounted) setState(() { _playerState = state; });
@@ -112,6 +114,30 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     }
   }
 
+  Future<void> _loadStoredPaths() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setState(() { _destinationPath = prefs.getString('destinationPath'); });
+    } catch (e) { _log('Error loading paths: $e'); }
+  }
+
+  Future<void> _pickDestinationDirectory() async {
+    try {
+      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      if (selectedDirectory != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('destinationPath', selectedDirectory);
+        setState(() { _destinationPath = selectedDirectory; });
+        _log('Destination set to: $selectedDirectory');
+      }
+    } catch (e) {
+      _log('Error picking directory: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not set directory: $e')),
+      );
+    }
+  }
+
   Future<void> _pickSourceFiles() async {
     _log('Initiating file selection...');
     
@@ -144,11 +170,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           _isLoading = true;
         });
 
-        // Background processing
         _processWebFiles(initialFiles);
       });
     } else {
-      // Desktop Fallback
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['mp3'],
@@ -170,7 +194,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         _isLoading = true;
       });
 
-      // Background processing for desktop could be added here
       setState(() { _isLoading = false; });
     }
   }
@@ -186,7 +209,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         await reader.onLoadEnd.first;
         final Uint8List bytes = reader.result as Uint8List;
 
-        // Extract Artwork
         final id3 = MP3Instance(bytes);
         final meta = id3.getMetaTags();
         if (meta != null && meta.containsKey('APIC')) {
@@ -198,7 +220,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           }
         }
 
-        // Create playback URL
         final blob = html.Blob([bytes]);
         mp3File.url = html.Url.createObjectUrlFromBlob(blob);
 
@@ -244,6 +265,44 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     });
   }
 
+  void _copySelectedFiles() {
+    if (_selectedFiles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No files selected to copy.')),
+      );
+      return;
+    }
+
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('On web, files are downloaded individually.')),
+      );
+      for (var file in _selectedFiles) {
+        final reader = html.FileReader();
+        reader.readAsArrayBuffer(file.webFile);
+        reader.onLoadEnd.listen((event) {
+          final blob = html.Blob([reader.result], 'audio/mpeg');
+          final url = html.Url.createObjectUrlFromBlob(blob);
+          html.AnchorElement(href: url)
+            ..setAttribute('download', file.name)
+            ..click();
+          html.Url.revokeObjectUrl(url);
+        });
+      }
+    } else {
+      if (_destinationPath == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please set a destination directory first.')),
+        );
+        return;
+      }
+      _log('Copying ${_selectedFiles.length} files to $_destinationPath (Mock implementation)');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Copying to $_destinationPath...')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -263,6 +322,12 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             onPressed: _pickSourceFiles,
             icon: const Icon(Icons.library_music),
             label: const Text('Load MP3s'),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: _pickDestinationDirectory,
+            icon: const Icon(Icons.folder_open),
+            label: Text(_destinationPath == null ? 'Set Dest' : 'Dest: ${p.basename(_destinationPath!)}'),
           ),
           const SizedBox(width: 16),
         ],
@@ -298,7 +363,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             child: Row(
               children: [
                 Expanded(
-                  flex: 3,
+                  flex: 1, // Changed to 1 to take half space
                   child: Container(
                     color: Colors.grey[100],
                     child: _allFiles.isEmpty && !_isLoading
@@ -377,12 +442,26 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                 ),
                 const VerticalDivider(width: 1),
                 Expanded(
-                  flex: 1,
+                  flex: 1, // Changed to 1 to take half space
                   child: Column(
                     children: [
                       Padding(
                         padding: const EdgeInsets.all(16.0),
-                        child: Text('To Be Copied (${_selectedFiles.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('To Be Copied (${_selectedFiles.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            ElevatedButton.icon(
+                              onPressed: _copySelectedFiles,
+                              icon: const Icon(Icons.copy),
+                              label: const Text('Copy Now'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       Expanded(
                         child: ListView(
