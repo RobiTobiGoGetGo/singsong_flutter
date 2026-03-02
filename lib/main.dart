@@ -54,7 +54,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.19+20';
+  static const String appVersion = '1.0.20+21';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -270,15 +270,12 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   void _copySelectedFiles() {
     if (_selectedFiles.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No files selected to copy.')),
-      );
       return;
     }
 
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('On web, browsers do not allow copying files to the clipboard for pasting into folders. Please use Download instead.')),
+        const SnackBar(content: Text('On web, files are downloaded individually to your Downloads folder.')),
       );
       // Fallback to downloading each file
       for (var file in _selectedFiles) {
@@ -302,7 +299,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       }
       _log('Copying ${_selectedFiles.length} files to $_destinationPath (Mock implementation)');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Copying ${_selectedFiles.length} files to $_destinationPath...')),
+        SnackBar(content: Text('Copying to $_destinationPath...')),
       );
     }
   }
@@ -456,11 +453,11 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('To Be Copied (${_selectedFiles.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            Text('Selected (${_selectedFiles.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                             ElevatedButton.icon(
-                              onPressed: _copySelectedFiles,
-                              icon: const Icon(Icons.download), // Web-friendly icon
-                              label: Text(kIsWeb ? 'Download Selected' : 'Copy to Dest'),
+                              onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null,
+                              icon: const Icon(Icons.download),
+                              label: const Text('Download'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,
                                 foregroundColor: Colors.white,
