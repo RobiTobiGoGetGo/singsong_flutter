@@ -1,0 +1,2 @@
+2026-03-02 16:07:11.964: App started v1.0.18+19
+2026-03-02 16:07:15.732: Error picking directory: UnimplementedError: getDirectoryPath() has not been implemented.
