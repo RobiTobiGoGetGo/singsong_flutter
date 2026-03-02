@@ -52,14 +52,13 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.15+16';
+  static const String appVersion = '1.0.16+17';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
   
   List<MP3File> _allFiles = [];
   final Set<MP3File> _selectedFiles = {};
-  String? _sourcePath;
   final List<String> _logs = [];
   
   bool _isLoading = false;
@@ -70,7 +69,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   void initState() {
     super.initState();
     _log('App started v$appVersion');
-    _loadStoredPaths();
     
     _audioPlayer.onPlayerStateChanged.listen((state) {
       if (mounted) setState(() { _playerState = state; });
@@ -87,7 +85,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   void _cleanupWebUrls() {
     if (kIsWeb) {
       for (var file in _allFiles) {
-        if (file.url != null) html.Url.revokeObjectUrl(file.url!);
+        if (file.url != null) {
+          try { html.Url.revokeObjectUrl(file.url!); } catch (_) {}
+        }
       }
     }
   }
@@ -108,13 +108,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         ..click();
       html.Url.revokeObjectUrl(url);
     }
-  }
-
-  Future<void> _loadStoredPaths() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      setState(() { _sourcePath = prefs.getString('sourcePath'); });
-    } catch (e) { _log('Error loading paths: $e'); }
   }
 
   Future<void> _pickSourceFiles() async {
@@ -148,29 +141,29 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         _totalFiles = initialFiles.length;
         _filesProcessed = 0;
         _isLoading = true;
-        _sourcePath = kIsWeb ? 'Web Session' : 'Local Drive';
       });
 
-      _log('Added ${initialFiles.length} names to grid. Starting background extraction...');
+      _log('PHASE 1 Complete: ${initialFiles.length} names added.');
 
-      // Give a tiny delay so the UI shows the names before processing images
-      await Future.delayed(const Duration(milliseconds: 100));
+      // CRITICAL: Delay to allow UI to render the grid of names before starting background work
+      await Future.delayed(const Duration(milliseconds: 300));
 
-      // PHASE 2: Process in background
-      _extractArtworkInBackground();
+      // PHASE 2: Background Artwork extraction
+      _processFiles(initialFiles);
 
     } catch (e) {
-      _log('CRITICAL ERROR picking files: $e');
+      _log('CRITICAL ERROR during selection: $e');
       setState(() { _isLoading = false; });
     }
   }
 
-  Future<void> _extractArtworkInBackground() async {
-    for (int i = 0; i < _allFiles.length; i++) {
-      final file = _allFiles[i];
+  Future<void> _processFiles(List<MP3File> files) async {
+    for (int i = 0; i < files.length; i++) {
+      final file = files[i];
       try {
         if (file.rawFile.bytes != null) {
-          MP3Instance mp3 = MP3Instance(file.rawFile.bytes!);
+          // Extract Artwork
+          final mp3 = MP3Instance(file.rawFile.bytes!);
           final meta = mp3.getMetaTags();
           if (meta != null && meta.containsKey('APIC')) {
             final apic = meta['APIC'];
@@ -181,21 +174,25 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             }
           }
 
+          // Create Playback URL
           if (kIsWeb) {
             final blob = html.Blob([file.rawFile.bytes!]);
             file.url = html.Url.createObjectUrlFromBlob(blob);
           }
         }
       } catch (e) {
-        _log('Meta error for ${file.name}: $e');
+        _log('Error processing ${file.name}: $e');
       }
 
-      if (i % 10 == 0 || i == _allFiles.length - 1) {
+      // Update progress every 10 files or at the end
+      if (i % 10 == 0 || i == files.length - 1) {
         setState(() { _filesProcessed = i + 1; });
+        // Yield to allow browser to repaint icons
         await Future.delayed(const Duration(milliseconds: 1));
       }
     }
     setState(() { _isLoading = false; });
+    _log('PHASE 2 Complete: All files processed.');
   }
 
   void _handlePlayback(MP3File file) async {
@@ -214,7 +211,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       if (kIsWeb && file.url != null) {
         await _audioPlayer.play(UrlSource(file.url!));
       } else if (!kIsWeb) {
-        final path = file.rawFile.path;
+        // Safe access to path ONLY on non-web
+        String? path;
+        try { path = file.rawFile.path; } catch (_) {}
         if (path != null) {
           await _audioPlayer.play(DeviceFileSource(path));
         } else if (file.rawFile.bytes != null) {
@@ -240,23 +239,13 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('SingSong'),
+            const Text('SingSong', style: TextStyle(fontWeight: FontWeight.bold)),
             Text('v$appVersion', style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
           ],
         ),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         actions: [
-          if (_isLoading)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Center(
-                child: Text(
-                  '${((_filesProcessed / _totalFiles) * 100).toInt()}% Loaded (${_filesProcessed}/${_totalFiles})',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
-                ),
-              ),
-            ),
-          IconButton(icon: const Icon(Icons.description), onPressed: _downloadLogs),
+          IconButton(icon: const Icon(Icons.description), tooltip: 'Logs', onPressed: _downloadLogs),
           const SizedBox(width: 8),
           ElevatedButton.icon(
             onPressed: _pickSourceFiles,
@@ -265,110 +254,133 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           ),
           const SizedBox(width: 16),
         ],
-        bottom: _isLoading ? PreferredSize(
-          preferredSize: const Size.fromHeight(4),
-          child: LinearProgressIndicator(
-            value: _filesProcessed / _totalFiles,
-            color: Colors.blue,
-            backgroundColor: Colors.white,
-          ),
-        ) : null,
       ),
-      body: Row(
+      body: Column(
         children: [
+          if (_isLoading)
+            Container(
+              padding: const EdgeInsets.all(12),
+              color: Colors.blue[50],
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.sync, color: Colors.blue),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Processing Artwork: $_filesProcessed / $_totalFiles Files (${((_filesProcessed / _totalFiles) * 100).toInt()}%)',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: _totalFiles > 0 ? _filesProcessed / _totalFiles : 0,
+                    minHeight: 8,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
-            flex: 3,
-            child: Container(
-              color: Colors.grey[100],
-              child: _allFiles.isEmpty && !_isLoading
-                ? const Center(child: Text('Click "Load MP3s" to start.'))
-                : GridView.builder(
-                    padding: const EdgeInsets.all(16),
-                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 180,
-                      childAspectRatio: 0.75,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
-                    itemCount: _allFiles.length,
-                    itemBuilder: (context, index) {
-                      final file = _allFiles[index];
-                      final isSelected = _selectedFiles.contains(file);
-                      final isCurrent = _currentFile == file;
-                      final isPlaying = isCurrent && _playerState == PlayerState.playing;
-
-                      return GestureDetector(
-                        onTap: () => _toggleSelection(file),
-                        child: Card(
-                          clipBehavior: Clip.antiAlias,
-                          color: isSelected ? Colors.blue[50] : null,
-                          shape: RoundedRectangleBorder(
-                            side: BorderSide(color: isSelected ? Colors.blue : Colors.transparent, width: 2),
-                            borderRadius: BorderRadius.circular(8),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    color: Colors.grey[100],
+                    child: _allFiles.isEmpty && !_isLoading
+                      ? const Center(child: Text('Click "Load MP3s" to select files.'))
+                      : GridView.builder(
+                          padding: const EdgeInsets.all(16),
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 180,
+                            childAspectRatio: 0.75,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(
-                                child: Stack(
-                                  fit: StackFit.expand,
+                          itemCount: _allFiles.length,
+                          itemBuilder: (context, index) {
+                            final file = _allFiles[index];
+                            final isSelected = _selectedFiles.contains(file);
+                            final isCurrent = _currentFile == file;
+                            final isPlaying = isCurrent && _playerState == PlayerState.playing;
+
+                            return GestureDetector(
+                              onTap: () => _toggleSelection(file),
+                              child: Card(
+                                clipBehavior: Clip.antiAlias,
+                                color: isSelected ? Colors.blue[50] : null,
+                                shape: RoundedRectangleBorder(
+                                  side: BorderSide(color: isSelected ? Colors.blue : Colors.transparent, width: 2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
-                                    if (file.artwork != null)
-                                      Image.memory(file.artwork!, fit: BoxFit.cover)
-                                    else
-                                      Container(
-                                        color: Colors.grey[300],
-                                        child: const Icon(Icons.music_note, size: 48, color: Colors.grey),
+                                    Expanded(
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          if (file.artwork != null)
+                                            Image.memory(file.artwork!, fit: BoxFit.cover)
+                                          else
+                                            Container(
+                                              color: Colors.grey[300],
+                                              child: const Icon(Icons.music_note, size: 48, color: Colors.grey),
+                                            ),
+                                          if (isSelected)
+                                            const Positioned(top: 4, left: 4, child: Icon(Icons.check_circle, color: Colors.blue)),
+                                          Positioned(
+                                            bottom: 4,
+                                            right: 4,
+                                            child: GestureDetector(
+                                              onTap: () => _handlePlayback(file),
+                                              child: Container(
+                                                padding: const EdgeInsets.all(4),
+                                                decoration: const BoxDecoration(color: Colors.white70, shape: BoxShape.circle),
+                                                child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.blue),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    if (isSelected)
-                                      const Positioned(top: 4, left: 4, child: Icon(Icons.check_circle, color: Colors.blue)),
-                                    Positioned(
-                                      bottom: 4,
-                                      right: 4,
-                                      child: GestureDetector(
-                                        onTap: () => _handlePlayback(file),
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: const BoxDecoration(color: Colors.white70, shape: BoxShape.circle),
-                                          child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.blue),
-                                        ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.all(6.0),
+                                      child: Text(
+                                        file.name,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(fontSize: 11, fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                              Padding(
-                                padding: const EdgeInsets.all(6.0),
-                                child: Text(
-                                  file.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(fontSize: 11, fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal),
-                                ),
-                              ),
-                            ],
-                          ),
+                            );
+                          },
                         ),
-                      );
-                    },
                   ),
-            ),
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(
-            flex: 1,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text('Selected: ${_selectedFiles.length}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
+                const VerticalDivider(width: 1),
                 Expanded(
-                  child: ListView(
-                    children: _selectedFiles.map((file) => ListTile(
-                      title: Text(file.name, style: const TextStyle(fontSize: 11)),
-                      trailing: IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => _toggleSelection(file)),
-                    )).toList(),
+                  flex: 1,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text('To Be Copied (${_selectedFiles.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                      Expanded(
+                        child: ListView(
+                          children: _selectedFiles.map((file) => ListTile(
+                            title: Text(file.name, style: const TextStyle(fontSize: 11)),
+                            trailing: IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => _toggleSelection(file)),
+                          )).toList(),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
