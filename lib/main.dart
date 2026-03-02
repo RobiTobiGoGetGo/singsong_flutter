@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart' show kIsWeb, Uint8List;
 import 'package:id3/id3.dart';
+import 'dart:io';
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 
@@ -54,13 +55,14 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.20+21';
+  static const String appVersion = '1.0.21+22';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
   
   List<MP3File> _allFiles = [];
   final Set<MP3File> _selectedFiles = {};
+  String? _sourcePath;
   String? _destinationPath;
   final List<String> _logs = [];
   
@@ -72,7 +74,11 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   void initState() {
     super.initState();
     _log('App started v$appVersion');
-    _loadStoredPaths();
+    _loadStoredPaths().then((_) {
+      if (!kIsWeb && _sourcePath != null) {
+        _autoLoadFiles(_sourcePath!);
+      }
+    });
     
     _audioPlayer.onPlayerStateChanged.listen((state) {
       if (mounted) setState(() { _playerState = state; });
@@ -117,14 +123,77 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   Future<void> _loadStoredPaths() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      setState(() { _destinationPath = prefs.getString('destinationPath'); });
+      setState(() { 
+        _sourcePath = prefs.getString('sourcePath');
+        _destinationPath = prefs.getString('destinationPath'); 
+      });
     } catch (e) { _log('Error loading paths: $e'); }
+  }
+
+  Future<void> _autoLoadFiles(String path) async {
+    _log('Auto-loading files from: $path');
+    try {
+      final dir = Directory(path);
+      if (!await dir.exists()) return;
+
+      final entities = await dir.list().toList();
+      List<MP3File> loadedFiles = [];
+      for (var entity in entities) {
+        if (entity is File && entity.path.toLowerCase().endsWith('.mp3')) {
+          loadedFiles.add(MP3File(
+            name: p.basename(entity.path),
+            size: await entity.length(),
+            desktopPath: entity.path,
+          ));
+        }
+      }
+
+      setState(() {
+        _allFiles = loadedFiles;
+        _totalFiles = loadedFiles.length;
+        _filesProcessed = 0;
+        _isLoading = true;
+      });
+
+      _processDesktopFiles(loadedFiles);
+    } catch (e) {
+      _log('Auto-load failed: $e');
+    }
+  }
+
+  Future<void> _processDesktopFiles(List<MP3File> files) async {
+    for (int i = 0; i < files.length; i++) {
+      final mp3File = files[i];
+      try {
+        final file = File(mp3File.desktopPath!);
+        final bytes = await file.readAsBytes();
+        
+        final id3 = MP3Instance(bytes);
+        final meta = id3.getMetaTags();
+        if (meta != null && meta.containsKey('APIC')) {
+          final apic = meta['APIC'];
+          if (apic is Uint8List) {
+            mp3File.artwork = apic;
+          } else if (apic is List<int>) {
+            mp3File.artwork = Uint8List.fromList(apic);
+          }
+        }
+      } catch (e) {
+        _log('Meta error for ${mp3File.name}: $e');
+      }
+
+      if (i % 10 == 0 || i == files.length - 1) {
+        if (mounted) setState(() { _filesProcessed = i + 1; });
+        await Future.delayed(const Duration(milliseconds: 1));
+      }
+    }
+    if (mounted) setState(() { _isLoading = false; });
   }
 
   Future<void> _pickDestinationDirectory() async {
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecting a destination folder is not supported in Web browsers. Files will be downloaded instead.')),
+        const SnackBar(content: Text('Destination folder picking not supported on Web.')),
       );
       return;
     }
@@ -134,7 +203,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('destinationPath', selectedDirectory);
         setState(() { _destinationPath = selectedDirectory; });
-        _log('Destination set to: $selectedDirectory');
       }
     } catch (e) {
       _log('Error picking directory: $e');
@@ -153,8 +221,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         if (files == null || files.isEmpty) return;
 
         _cleanupWebUrls();
-        _log('Selected ${files.length} files. Populating grid instantly...');
-
         List<MP3File> initialFiles = [];
         for (var file in files) {
           if (file.name.toLowerCase().endsWith('.mp3')) {
@@ -184,6 +250,14 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
       if (result == null || result.files.isEmpty) return;
 
+      final firstPath = result.files.first.path;
+      if (firstPath != null) {
+        final dir = p.dirname(firstPath);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('sourcePath', dir);
+        setState(() { _sourcePath = dir; });
+      }
+
       List<MP3File> initialFiles = result.files.map((f) => MP3File(
         name: f.name,
         size: f.size,
@@ -197,18 +271,16 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         _isLoading = true;
       });
 
-      setState(() { _isLoading = false; });
+      _processDesktopFiles(initialFiles);
     }
   }
 
   Future<void> _processWebFiles(List<MP3File> files) async {
     for (int i = 0; i < files.length; i++) {
       final mp3File = files[i];
-      final html.File file = mp3File.webFile;
-
       try {
         final reader = html.FileReader();
-        reader.readAsArrayBuffer(file);
+        reader.readAsArrayBuffer(mp3File.webFile);
         await reader.onLoadEnd.first;
         final Uint8List bytes = reader.result as Uint8List;
 
@@ -225,19 +297,16 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
         final blob = html.Blob([bytes]);
         mp3File.url = html.Url.createObjectUrlFromBlob(blob);
-
       } catch (e) {
         _log('Error processing ${mp3File.name}: $e');
       }
 
       if (i % 10 == 0 || i == files.length - 1) {
-        if (!mounted) return;
-        setState(() { _filesProcessed = i + 1; });
+        if (mounted) setState(() { _filesProcessed = i + 1; });
         await Future.delayed(const Duration(milliseconds: 1));
       }
     }
     if (mounted) setState(() { _isLoading = false; });
-    _log('Background processing complete.');
   }
 
   void _handlePlayback(MP3File file) async {
@@ -269,15 +338,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   }
 
   void _copySelectedFiles() {
-    if (_selectedFiles.isEmpty) {
-      return;
-    }
+    if (_selectedFiles.isEmpty) return;
 
     if (kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('On web, files are downloaded individually to your Downloads folder.')),
-      );
-      // Fallback to downloading each file
       for (var file in _selectedFiles) {
         final reader = html.FileReader();
         reader.readAsArrayBuffer(file.webFile);
@@ -291,15 +354,15 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         });
       }
     } else {
-      if (_destinationPath == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please set a destination directory first.')),
-        );
-        return;
+      if (_destinationPath == null) return;
+      for (var file in _selectedFiles) {
+        try {
+          final source = File(file.desktopPath!);
+          source.copySync(p.join(_destinationPath!, file.name));
+        } catch (e) { _log('Copy failed: $e'); }
       }
-      _log('Copying ${_selectedFiles.length} files to $_destinationPath (Mock implementation)');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Copying to $_destinationPath...')),
+        SnackBar(content: Text('Copied ${_selectedFiles.length} files.')),
       );
     }
   }
@@ -317,7 +380,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         ),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         actions: [
-          IconButton(icon: const Icon(Icons.description), tooltip: 'Logs', onPressed: _downloadLogs),
+          IconButton(icon: const Icon(Icons.description), onPressed: _downloadLogs),
           const SizedBox(width: 8),
           ElevatedButton.icon(
             onPressed: _pickSourceFiles,
@@ -366,7 +429,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             child: Row(
               children: [
                 Expanded(
-                  flex: 1, // 50% split
+                  flex: 1,
                   child: Container(
                     color: Colors.grey[100],
                     child: _allFiles.isEmpty && !_isLoading
@@ -445,7 +508,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                 ),
                 const VerticalDivider(width: 1),
                 Expanded(
-                  flex: 1, // 50% split
+                  flex: 1,
                   child: Column(
                     children: [
                       Padding(
@@ -456,8 +519,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                             Text('Selected (${_selectedFiles.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                             ElevatedButton.icon(
                               onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null,
-                              icon: const Icon(Icons.download),
-                              label: const Text('Download'),
+                              icon: Icon(kIsWeb ? Icons.download : Icons.copy),
+                              label: Text(kIsWeb ? 'Download' : 'Copy Now'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,
                                 foregroundColor: Colors.white,
