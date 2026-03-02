@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart' show kIsWeb, Uint8List;
 import 'package:id3/id3.dart';
 import 'dart:io';
+import 'dart:convert'; // For base64 handling
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 
@@ -55,7 +56,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.21+22';
+  static const String appVersion = '1.0.23+24';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -130,6 +131,35 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     } catch (e) { _log('Error loading paths: $e'); }
   }
 
+  Uint8List? _extractArtwork(Uint8List bytes) {
+    try {
+      final id3 = MP3Instance(bytes);
+      final meta = id3.getMetaTags();
+      if (meta == null) return null;
+
+      dynamic apicData;
+      if (meta.containsKey('APIC')) {
+        apicData = meta['APIC'];
+      } else if (meta.containsKey('PIC')) {
+        apicData = meta['PIC'];
+      }
+
+      if (apicData == null) return null;
+
+      if (apicData is Map && apicData.containsKey('base64')) {
+        return base64Decode(apicData['base64']);
+      }
+      
+      if (apicData is Uint8List) return apicData;
+      if (apicData is List<int>) return Uint8List.fromList(apicData);
+
+      return null;
+    } catch (e) {
+      debugPrint('Artwork extraction error: $e');
+      return null;
+    }
+  }
+
   Future<void> _autoLoadFiles(String path) async {
     _log('Auto-loading files from: $path');
     try {
@@ -167,17 +197,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       try {
         final file = File(mp3File.desktopPath!);
         final bytes = await file.readAsBytes();
-        
-        final id3 = MP3Instance(bytes);
-        final meta = id3.getMetaTags();
-        if (meta != null && meta.containsKey('APIC')) {
-          final apic = meta['APIC'];
-          if (apic is Uint8List) {
-            mp3File.artwork = apic;
-          } else if (apic is List<int>) {
-            mp3File.artwork = Uint8List.fromList(apic);
-          }
-        }
+        mp3File.artwork = _extractArtwork(bytes);
       } catch (e) {
         _log('Meta error for ${mp3File.name}: $e');
       }
@@ -193,7 +213,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   Future<void> _pickDestinationDirectory() async {
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Destination folder picking not supported on Web.')),
+        const SnackBar(content: Text('Selecting a destination folder is not supported in Web browsers. Files will be downloaded instead.')),
       );
       return;
     }
@@ -284,16 +304,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         await reader.onLoadEnd.first;
         final Uint8List bytes = reader.result as Uint8List;
 
-        final id3 = MP3Instance(bytes);
-        final meta = id3.getMetaTags();
-        if (meta != null && meta.containsKey('APIC')) {
-          final apic = meta['APIC'];
-          if (apic is Uint8List) {
-            mp3File.artwork = apic;
-          } else if (apic is List<int>) {
-            mp3File.artwork = Uint8List.fromList(apic);
-          }
-        }
+        mp3File.artwork = _extractArtwork(bytes);
 
         final blob = html.Blob([bytes]);
         mp3File.url = html.Url.createObjectUrlFromBlob(blob);
