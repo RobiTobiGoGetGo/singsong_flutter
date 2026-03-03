@@ -37,6 +37,8 @@ class MP3File {
   String? url; 
   final dynamic webFile; 
   final String? desktopPath;
+  String? title;
+  String? artist;
 
   MP3File({
     required this.name,
@@ -45,6 +47,8 @@ class MP3File {
     this.desktopPath,
     this.artwork,
     this.url,
+    this.title,
+    this.artist,
   });
 }
 
@@ -56,7 +60,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.31+32';
+  static const String appVersion = '1.0.32+33';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -72,6 +76,12 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   int _totalFiles = 0;
   int _currentLoadId = 0;
 
+  String _filter = '';
+  final TextEditingController _filterController = TextEditingController();
+
+  Duration _duration = Duration.zero;
+  Duration _position = Duration.zero;
+
   @override
   void initState() {
     super.initState();
@@ -85,12 +95,28 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     _audioPlayer.onPlayerStateChanged.listen((state) {
       if (mounted) setState(() { _playerState = state; });
     });
+
+    _audioPlayer.onDurationChanged.listen((d) {
+      if (mounted) setState(() { _duration = d; });
+    });
+
+    _audioPlayer.onPositionChanged.listen((p) {
+      if (mounted) setState(() { _position = p; });
+    });
+
+    _audioPlayer.onPlayerComplete.listen((event) {
+      if (mounted) setState(() { 
+        _playerState = PlayerState.stopped;
+        _position = Duration.zero;
+      });
+    });
   }
 
   @override
   void dispose() {
     _cleanupWebUrls();
     _audioPlayer.dispose();
+    _filterController.dispose();
     super.dispose();
   }
 
@@ -132,37 +158,42 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     } catch (e) { _log('Error loading paths: $e'); }
   }
 
-  Uint8List? _extractArtwork(Uint8List bytes, String fileName) {
+  void _extractMetadata(MP3File mp3File, Uint8List bytes) {
     try {
       final id3 = MP3Instance(bytes);
       final meta = id3.getMetaTags();
       if (meta != null) {
+        mp3File.title = meta['Title']?.toString();
+        mp3File.artist = meta['Artist']?.toString();
+        
         dynamic apicData = meta['APIC'] ?? meta['PIC'];
         if (apicData != null) {
-          if (apicData is Map && apicData.containsKey('base64')) return base64Decode(apicData['base64']);
-          if (apicData is Uint8List) return apicData;
-          if (apicData is List<int>) return Uint8List.fromList(apicData);
+          if (apicData is Map && apicData.containsKey('base64')) {
+            mp3File.artwork = base64Decode(apicData['base64']);
+          } else if (apicData is Uint8List) {
+            mp3File.artwork = apicData;
+          } else if (apicData is List<int>) {
+            mp3File.artwork = Uint8List.fromList(apicData);
+          }
         }
       }
 
-      for (int i = 0; i < bytes.length - 10; i++) {
-        if (bytes[i] == 0xFF && bytes[i+1] == 0xD8 && bytes[i+2] == 0xFF) {
-          int end = (i + 500000 > bytes.length) ? bytes.length : i + 500000;
-          _log('[$fileName] Recovered artwork via binary scan.');
-          return bytes.sublist(i, end);
+      if (mp3File.artwork == null) {
+        for (int i = 0; i < bytes.length - 10; i++) {
+          if (bytes[i] == 0xFF && bytes[i+1] == 0xD8 && bytes[i+2] == 0xFF) {
+            int end = (i + 500000 > bytes.length) ? bytes.length : i + 500000;
+            mp3File.artwork = bytes.sublist(i, end);
+            break;
+          }
+          if (bytes[i] == 0x89 && bytes[i+1] == 0x50 && bytes[i+2] == 0x4E && bytes[i+3] == 0x47) {
+            int end = (i + 500000 > bytes.length) ? bytes.length : i + 500000;
+            mp3File.artwork = bytes.sublist(i, end);
+            break;
+          }
+          if (i > 1000000) break;
         }
-        if (bytes[i] == 0x89 && bytes[i+1] == 0x50 && bytes[i+2] == 0x4E && bytes[i+3] == 0x47) {
-          int end = (i + 500000 > bytes.length) ? bytes.length : i + 500000;
-          _log('[$fileName] Recovered PNG artwork via binary scan.');
-          return bytes.sublist(i, end);
-        }
-        if (i > 1000000) break;
       }
-      return null;
-    } catch (e) {
-      _log('Scan error: $e');
-      return null;
-    }
+    } catch (e) { _log('Metadata extraction error: $e'); }
   }
 
   Future<void> _autoLoadFiles(String path) async {
@@ -202,10 +233,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       try {
         final file = File(mp3File.desktopPath!);
         final bytes = await file.readAsBytes();
-        mp3File.artwork = _extractArtwork(bytes, mp3File.name);
-      } catch (e) {
-        _log('Meta error for ${mp3File.name}: $e');
-      }
+        _extractMetadata(mp3File, bytes);
+      } catch (e) { _log('Error for ${mp3File.name}: $e'); }
 
       if (i % 5 == 0 || i == files.length - 1) {
         if (mounted && loadId == _currentLoadId) setState(() { _filesProcessed = i + 1; });
@@ -333,7 +362,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         reader.readAsArrayBuffer(mp3File.webFile);
         await reader.onLoadEnd.first;
         final Uint8List bytes = reader.result as Uint8List;
-        mp3File.artwork = _extractArtwork(bytes, mp3File.name);
+        _extractMetadata(mp3File, bytes);
         final blob = html.Blob([bytes]);
         mp3File.url = html.Url.createObjectUrlFromBlob(blob);
       } catch (e) { _log('Error processing ${mp3File.name}: $e'); }
@@ -346,13 +375,32 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   }
 
   void _handlePlayback(MP3File file) async {
-    if (_currentFile == file && _playerState == PlayerState.playing) { await _audioPlayer.pause(); return; }
-    if (_currentFile == file && _playerState == PlayerState.paused) { await _audioPlayer.resume(); return; }
+    if (_currentFile == file) {
+      if (_playerState == PlayerState.playing) { 
+        await _audioPlayer.pause(); 
+      } else if (_playerState == PlayerState.paused) { 
+        await _audioPlayer.resume(); 
+      } else {
+        await _play(file);
+      }
+      return;
+    }
+    await _play(file);
+  }
+
+  Future<void> _play(MP3File file) async {
     _log('Playing: ${file.name}');
     try {
-      setState(() { _currentFile = file; });
-      if (kIsWeb && file.url != null) { await _audioPlayer.play(UrlSource(file.url!)); }
-      else if (!kIsWeb && file.desktopPath != null) { await _audioPlayer.play(DeviceFileSource(file.desktopPath!)); }
+      setState(() { 
+        _currentFile = file; 
+        _position = Duration.zero;
+        _duration = Duration.zero;
+      });
+      if (kIsWeb && file.url != null) { 
+        await _audioPlayer.play(UrlSource(file.url!)); 
+      } else if (!kIsWeb && file.desktopPath != null) { 
+        await _audioPlayer.play(DeviceFileSource(file.desktopPath!)); 
+      }
     } catch (e) { _log('PLAYBACK ERROR: $e'); }
   }
 
@@ -385,8 +433,24 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     }
   }
 
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
+    return "$twoDigitMinutes:$twoDigitSeconds";
+  }
+
   @override
   Widget build(BuildContext context) {
+    final filteredFiles = _allFiles.where((file) {
+      if (_filter.isEmpty) return true;
+      final query = _filter.toLowerCase();
+      final nameMatch = file.name.toLowerCase().contains(query);
+      final titleMatch = file.title?.toLowerCase().contains(query) ?? false;
+      final artistMatch = file.artist?.toLowerCase().contains(query) ?? false;
+      return nameMatch || titleMatch || artistMatch;
+    }).toList();
+
     String sourceInfo = _sourcePath != null 
         ? '${kIsWeb ? _sourcePath : p.basename(_sourcePath!)} (${_allFiles.length} files)'
         : 'No files loaded';
@@ -439,6 +503,25 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                 ],
               ),
             ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: TextField(
+              controller: _filterController,
+              decoration: InputDecoration(
+                hintText: 'Filter by name, title, or performer...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _filter.isNotEmpty 
+                  ? IconButton(icon: const Icon(Icons.clear), onPressed: () {
+                      _filterController.clear();
+                      setState(() { _filter = ''; });
+                    })
+                  : null,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+              ),
+              onChanged: (value) => setState(() { _filter = value; }),
+            ),
+          ),
           Expanded(
             child: Row(
               children: [
@@ -450,10 +533,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                       ? const Center(child: Text('Click "Load MP3s" to select files.'))
                       : GridView.builder(
                           padding: const EdgeInsets.all(16),
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 180, childAspectRatio: 0.75, crossAxisSpacing: 12, mainAxisSpacing: 12),
-                          itemCount: _allFiles.length,
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 180, childAspectRatio: 0.7, crossAxisSpacing: 12, mainAxisSpacing: 12),
+                          itemCount: filteredFiles.length,
                           itemBuilder: (context, index) {
-                            final file = _allFiles[index];
+                            final file = filteredFiles[index];
                             final isSelected = _selectedFiles.contains(file);
                             final isCurrent = _currentFile == file;
                             final isPlaying = isCurrent && _playerState == PlayerState.playing;
@@ -485,7 +568,16 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                         ],
                                       ),
                                     ),
-                                    Padding(padding: const EdgeInsets.all(6.0), child: Text(file.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal))),
+                                    Padding(
+                                      padding: const EdgeInsets.all(6.0),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(file.title ?? file.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal)),
+                                          if (file.artist != null) Text(file.artist!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                        ],
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -524,7 +616,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                   ? Image.memory(file.artwork!, fit: BoxFit.cover)
                                   : const Icon(Icons.music_note, size: 24, color: Colors.grey),
                             ),
-                            title: Text(file.name, style: const TextStyle(fontSize: 11)),
+                            title: Text(file.title ?? file.name, style: const TextStyle(fontSize: 11)),
+                            subtitle: file.artist != null ? Text(file.artist!, style: const TextStyle(fontSize: 10)) : null,
                             trailing: IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => _toggleSelection(file)),
                           )).toList(),
                         ),
@@ -534,6 +627,76 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                 ),
               ],
             ),
+          ),
+          if (_currentFile != null) _buildPlayerBar(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlayerBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, -2))],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48, height: 48,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  color: Colors.grey[300],
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: _currentFile?.artwork != null 
+                    ? Image.memory(_currentFile!.artwork!, fit: BoxFit.cover)
+                    : const Icon(Icons.music_note, color: Colors.grey),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_currentFile?.title ?? _currentFile?.name ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(_currentFile?.artist ?? 'Unknown Artist', style: const TextStyle(color: Colors.grey, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: Icon(_playerState == PlayerState.playing ? Icons.pause : Icons.play_arrow),
+                onPressed: () => _handlePlayback(_currentFile!),
+              ),
+              IconButton(
+                icon: const Icon(Icons.stop),
+                onPressed: () async {
+                  await _audioPlayer.stop();
+                  setState(() { 
+                    _playerState = PlayerState.stopped;
+                    _position = Duration.zero;
+                  });
+                },
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              Text(_formatDuration(_position), style: const TextStyle(fontSize: 10)),
+              Expanded(
+                child: Slider(
+                  value: _position.inMilliseconds.toDouble(),
+                  max: _duration.inMilliseconds.toDouble() > 0 ? _duration.inMilliseconds.toDouble() : 1.0,
+                  onChanged: (val) {
+                    _audioPlayer.seek(Duration(milliseconds: val.toInt()));
+                  },
+                ),
+              ),
+              Text(_formatDuration(_duration), style: const TextStyle(fontSize: 10)),
+            ],
           ),
         ],
       ),
