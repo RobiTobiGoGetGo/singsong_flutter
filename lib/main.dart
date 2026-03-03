@@ -394,7 +394,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   Future<void> _play(MP3File file) async {
     _log('Playing: ${file.name}');
-    // Also save current filter if active when playing a song
     if (_filter.trim().isNotEmpty) {
       _onFilterSubmitted(_filter);
     }
@@ -452,15 +451,13 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return;
     
-    if (!_filterHistory.contains(trimmed)) {
-      setState(() {
-        _filterHistory.insert(0, trimmed);
-        if (_filterHistory.length > 20) _filterHistory.removeLast();
-      });
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList('filterHistory', _filterHistory);
-      _log('Filter history updated: $trimmed');
-    }
+    setState(() {
+      _filterHistory.remove(trimmed);
+      _filterHistory.insert(0, trimmed);
+      if (_filterHistory.length > 20) _filterHistory.removeLast();
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('filterHistory', _filterHistory);
   }
 
   @override
