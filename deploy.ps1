@@ -27,7 +27,7 @@ Copy-Item -Path "build/web/*" -Destination "." -Recurse -Force
 
 Write-Host "PUSHING TO GITHUB..." -ForegroundColor Yellow
 git add .
-git commit -m "Auto-Release v1.0.38+39"
+git commit -m "Auto-Release v1.0.39+40"
 git push origin main:gh-pages --force
 
-Write-Host "SUCCESS! v1.0.38+39 is now on GitHub." -ForegroundColor Green
+Write-Host "SUCCESS! v1.0.39+40 is now on GitHub." -ForegroundColor Green
