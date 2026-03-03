@@ -51,16 +51,8 @@ class MP3File {
   final dynamic webFile; 
   final String? desktopPath;
   
-  // Group "Title": ['Title', 'TIT2']
   String? title;
-  String? tit2;
-  
-  // Group "Artist/Author": ['TIT3', 'TPE1', 'TPE2', 'Artist', 'Author']
-  String? tit3;
-  String? tpe1;
-  String? tpe2;
   String? artist;
-  String? author;
 
   MP3File({
     required this.name,
@@ -70,24 +62,17 @@ class MP3File {
     this.artwork,
     this.url,
     this.title,
-    this.tit2,
-    this.tit3,
     this.artist,
-    this.tpe1,
-    this.tpe2,
-    this.author,
   });
 
   // Display Logic: Artist Group
   String get displayArtist {
-    final performer = artist ?? tpe1 ?? tpe2 ?? author ?? tit3;
-    return performer?.trim().isNotEmpty == true ? performer! : 'Unknown Artist';
+    return artist?.trim().isNotEmpty == true ? artist! : 'Unknown Artist';
   }
 
   // Display Logic: Title Group
   String get displayTitle {
-    final t = title ?? tit2;
-    return t?.trim().isNotEmpty == true ? t! : name;
+    return title?.trim().isNotEmpty == true ? title! : name;
   }
 }
 
@@ -99,7 +84,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.44+45';
+  static const String appVersion = '1.0.45+46';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -214,17 +199,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           }
         });
 
-        // Mapping logic based on Groups
         mp3File.title = meta['Title']?.toString() ?? meta['title']?.toString();
-        mp3File.tit2 = meta['TIT2']?.toString();
-        
-        mp3File.tit3 = meta['TIT3']?.toString();
-        mp3File.tpe1 = meta['TPE1']?.toString();
-        mp3File.tpe2 = meta['TPE2']?.toString();
         mp3File.artist = meta['Artist']?.toString() ?? meta['artist']?.toString();
-        mp3File.author = meta['Author']?.toString() ?? meta['author']?.toString();
         
-        _log('Captured: Title Group [title=${mp3File.title}, tit2=${mp3File.tit2}], Artist Group [artist=${mp3File.artist}, tpe1=${mp3File.tpe1}, tpe2=${mp3File.tpe2}, author=${mp3File.author}, tit3=${mp3File.tit3}]');
+        _log('Captured: Title=${mp3File.title}, Artist=${mp3File.artist}');
 
         dynamic apicData = meta['APIC'] ?? meta['PIC'];
         if (apicData != null) {
@@ -525,19 +503,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       final query = _filter.toLowerCase();
 
       final nameMatch = file.name.toLowerCase().contains(query);
-      
-      // Title Group: ['Title', 'TIT2']
       final titleMatch = file.title?.toLowerCase().contains(query) ?? false;
-      final tit2Match = file.tit2?.toLowerCase().contains(query) ?? false;
-      
-      // Artist/Author Group: ['TIT3', 'TPE1', 'TPE2', 'Artist', 'Author']
-      final tit3Match = file.tit3?.toLowerCase().contains(query) ?? false;
-      final tpe1Match = file.tpe1?.toLowerCase().contains(query) ?? false;
-      final tpe2Match = file.tpe2?.toLowerCase().contains(query) ?? false;
       final artistMatch = file.artist?.toLowerCase().contains(query) ?? false;
-      final authorMatch = file.author?.toLowerCase().contains(query) ?? false;
       
-      return nameMatch || titleMatch || tit2Match || tit3Match || tpe1Match || tpe2Match || artistMatch || authorMatch;
+      return nameMatch || titleMatch || artistMatch;
     }).toList();
 
     String sourceInfo = _sourcePath != null 
