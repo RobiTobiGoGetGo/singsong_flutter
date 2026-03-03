@@ -1,0 +1,79 @@
+CLEANING AND BUILDING...
+Deleting build...                                                   26ms
+Deleting .dart_tool...                                              13ms
+Deleting ephemeral...                                                1ms
+Deleting Generated.xcconfig...                                       0ms
+Deleting flutter_export_environment.sh...                            0ms
+Deleting ephemeral...                                                2ms
+Deleting ephemeral...                                                1ms
+Deleting ephemeral...                                                1ms
+Deleting .flutter-plugins-dependencies...                            0ms
+Resolving dependencies...
+Downloading packages...
+  audioplayers 5.2.1 (6.6.0 available)
+  audioplayers_android 4.0.3 (5.2.1 available)
+  audioplayers_darwin 5.0.2 (6.4.0 available)
+  audioplayers_linux 3.1.0 (4.2.1 available)
+  audioplayers_platform_interface 6.1.0 (7.1.1 available)
+  audioplayers_web 4.1.0 (5.2.0 available)
+  audioplayers_windows 3.1.0 (4.3.0 available)
+  file_picker 8.3.7 (10.3.10 available)
+  id3 1.0.2 (discontinued)
+  js 0.6.7 (0.7.2 available)
+  matcher 0.12.18 (0.12.19 available)
+  meta 1.17.0 (1.18.1 available)
+  test_api 0.7.9 (0.7.10 available)
+  win32 5.15.0 (6.0.0 available)
+Got dependencies!
+1 package is discontinued.
+13 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Resolving dependencies...
+Downloading packages...
+  audioplayers 5.2.1 (6.6.0 available)
+  audioplayers_android 4.0.3 (5.2.1 available)
+  audioplayers_darwin 5.0.2 (6.4.0 available)
+  audioplayers_linux 3.1.0 (4.2.1 available)
+  audioplayers_platform_interface 6.1.0 (7.1.1 available)
+  audioplayers_web 4.1.0 (5.2.0 available)
+  audioplayers_windows 3.1.0 (4.3.0 available)
+  file_picker 8.3.7 (10.3.10 available)
+  id3 1.0.2 (discontinued)
+  js 0.6.7 (0.7.2 available)
+  matcher 0.12.18 (0.12.19 available)
+  meta 1.17.0 (1.18.1 available)
+  test_api 0.7.9 (0.7.10 available)
+  win32 5.15.0 (6.0.0 available)
+Got dependencies!
+1 package is discontinued.
+13 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Font asset "CupertinoIcons.ttf" was tree-shaken, reducing it from 257628 to 1472 bytes (99.4% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag
+when building your app.
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 8640 bytes (99.5% reduction). Tree-shaking can be disabled by providing the
+--no-tree-shake-icons flag when building your app.
+Compiling lib\main.dart for the Web...                             21.8s
+√ Built build\web
+WIPING OLD WEB FILES...
+SYNCING NEW BUILD...
+PUSHING TO GITHUB...
+warning: in the working copy of 'assets/NOTICES', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'assets/shaders/ink_sparkle.frag', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'assets/shaders/stretch_effect.frag', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'canvaskit/canvaskit.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'canvaskit/canvaskit.js.symbols', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'canvaskit/chromium/canvaskit.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'canvaskit/chromium/canvaskit.js.symbols', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'canvaskit/skwasm.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'canvaskit/skwasm.js.symbols', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'canvaskit/skwasm_heavy.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'canvaskit/skwasm_heavy.js.symbols', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'canvaskit/wimp.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'canvaskit/wimp.js.symbols', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'flutter_bootstrap.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'main.dart.js', LF will be replaced by CRLF the next time Git touches it
+[main 4cbc1b6] Auto-Release v1.0.39+40
+ 7 files changed, 29901 insertions(+), 29846 deletions(-)
+remote: Internal Server Error
+fatal: unable to access 'https://github.com/RobiTobiGoGetGo/singsong_flutter.git/': The requested URL returned error: 500
+SUCCESS! v1.0.39+40 is now on GitHub.
