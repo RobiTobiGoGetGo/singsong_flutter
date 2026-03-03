@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart' show kIsWeb, Uint8List;
 import 'package:id3/id3.dart';
 import 'dart:io';
-import 'dart:convert'; // For base64 handling
+import 'dart:convert';
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 
@@ -35,7 +35,7 @@ class MP3File {
   final int size;
   Uint8List? artwork;
   String? url; 
-  final dynamic webFile; // Stores html.File on web
+  final dynamic webFile; 
   final String? desktopPath;
 
   MP3File({
@@ -56,7 +56,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.24+25';
+  static const String appVersion = '1.0.25+26';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -133,59 +133,35 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   Uint8List? _extractArtwork(Uint8List bytes, String fileName) {
     try {
-      _log('[$fileName] Attempting artwork extraction. Byte length: ${bytes.length}');
+      // 1. Standard Metadata Parse
       final id3 = MP3Instance(bytes);
       final meta = id3.getMetaTags();
-      if (meta == null) {
-        _log('[$fileName] No metadata found.');
-        return null;
-      }
-
-      _log('[$fileName] Tag keys found: ${meta.keys.toList()}');
-
-      dynamic apicData;
-      if (meta.containsKey('APIC')) {
-        apicData = meta['APIC'];
-        _log('[$fileName] Found APIC tag.');
-      } else if (meta.containsKey('PIC')) {
-        apicData = meta['PIC'];
-        _log('[$fileName] Found legacy PIC tag.');
-      }
-
-      if (apicData == null) {
-        _log('[$fileName] No artwork tag found.');
-        return null;
-      }
-
-      _log('[$fileName] Artwork data runtime type: ${apicData.runtimeType}');
-
-      if (apicData is Map) {
-        _log('[$fileName] APIC data is a Map. Keys: ${apicData.keys.toList()}');
-        if (apicData.containsKey('base64')) {
-          _log('[$fileName] Found base64 in APIC map.');
-          return base64Decode(apicData['base64']);
-        }
-        if (apicData.containsKey('data')) {
-          _log('[$fileName] Found data in APIC map.');
-          final data = apicData['data'];
-          if (data is Uint8List) return data;
-          if (data is List<int>) return Uint8List.fromList(data);
+      if (meta != null) {
+        dynamic apicData = meta['APIC'] ?? meta['PIC'];
+        if (apicData != null) {
+          if (apicData is Map && apicData.containsKey('base64')) return base64Decode(apicData['base64']);
+          if (apicData is Uint8List) return apicData;
+          if (apicData is List<int>) return Uint8List.fromList(apicData);
         }
       }
-      
-      if (apicData is Uint8List) {
-        _log('[$fileName] Artwork data is Uint8List. Length: ${apicData.length}');
-        return apicData;
-      }
-      if (apicData is List<int>) {
-        _log('[$fileName] Artwork data is List<int>. Length: ${apicData.length}');
-        return Uint8List.fromList(apicData);
-      }
 
-      _log('[$fileName] Unknown artwork data format.');
+      // 2. Binary Scan Recovery (Searches for actual image headers)
+      for (int i = 0; i < bytes.length - 10; i++) {
+        if (bytes[i] == 0xFF && bytes[i+1] == 0xD8 && bytes[i+2] == 0xFF) {
+          int end = (i + 500000 > bytes.length) ? bytes.length : i + 500000;
+          _log('[$fileName] Recovered artwork via binary scan.');
+          return bytes.sublist(i, end);
+        }
+        if (bytes[i] == 0x89 && bytes[i+1] == 0x50 && bytes[i+2] == 0x4E && bytes[i+3] == 0x47) {
+          int end = (i + 500000 > bytes.length) ? bytes.length : i + 500000;
+          _log('[$fileName] Recovered PNG artwork via binary scan.');
+          return bytes.sublist(i, end);
+        }
+        if (i > 1000000) break; // Scan first 1MB only
+      }
       return null;
     } catch (e) {
-      _log('[$fileName] Extraction error: $e');
+      _log('Scan error: $e');
       return null;
     }
   }
@@ -216,9 +192,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       });
 
       _processDesktopFiles(loadedFiles);
-    } catch (e) {
-      _log('Auto-load failed: $e');
-    }
+    } catch (e) { _log('Auto-load failed: $e'); }
   }
 
   Future<void> _processDesktopFiles(List<MP3File> files) async {
@@ -228,11 +202,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         final file = File(mp3File.desktopPath!);
         final bytes = await file.readAsBytes();
         mp3File.artwork = _extractArtwork(bytes, mp3File.name);
-      } catch (e) {
-        _log('Meta error for ${mp3File.name}: $e');
-      }
+      } catch (e) { _log('Meta error for ${mp3File.name}: $e'); }
 
-      if (i % 10 == 0 || i == files.length - 1) {
+      if (i % 5 == 0 || i == files.length - 1) {
         if (mounted) setState(() { _filesProcessed = i + 1; });
         await Future.delayed(const Duration(milliseconds: 1));
       }
@@ -241,12 +213,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   }
 
   Future<void> _pickDestinationDirectory() async {
-    if (kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecting a destination folder is not supported in Web browsers. Files will be downloaded instead.')),
-      );
-      return;
-    }
+    if (kIsWeb) return;
     try {
       String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
       if (selectedDirectory != null) {
@@ -254,52 +221,34 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         await prefs.setString('destinationPath', selectedDirectory);
         setState(() { _destinationPath = selectedDirectory; });
       }
-    } catch (e) {
-      _log('Error picking directory: $e');
-    }
+    } catch (e) { _log('Error picking directory: $e'); }
   }
 
   Future<void> _pickSourceFiles() async {
-    _log('Initiating file selection...');
-    
     if (kIsWeb) {
       final input = html.FileUploadInputElement()..multiple = true..accept = '.mp3';
       input.click();
-
       input.onChange.listen((event) async {
         final files = input.files;
         if (files == null || files.isEmpty) return;
-
         _cleanupWebUrls();
         List<MP3File> initialFiles = [];
         for (var file in files) {
           if (file.name.toLowerCase().endsWith('.mp3')) {
-            initialFiles.add(MP3File(
-              name: file.name,
-              size: file.size,
-              webFile: file,
-            ));
+            initialFiles.add(MP3File(name: file.name, size: file.size, webFile: file));
           }
         }
-
         setState(() {
           _allFiles = initialFiles;
           _totalFiles = initialFiles.length;
           _filesProcessed = 0;
           _isLoading = true;
         });
-
         _processWebFiles(initialFiles);
       });
     } else {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['mp3'],
-        allowMultiple: true,
-      );
-
+      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['mp3'], allowMultiple: true);
       if (result == null || result.files.isEmpty) return;
-
       final firstPath = result.files.first.path;
       if (firstPath != null) {
         final dir = p.dirname(firstPath);
@@ -307,20 +256,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         await prefs.setString('sourcePath', dir);
         setState(() { _sourcePath = dir; });
       }
-
-      List<MP3File> initialFiles = result.files.map((f) => MP3File(
-        name: f.name,
-        size: f.size,
-        desktopPath: f.path,
-      )).toList();
-
-      setState(() {
-        _allFiles = initialFiles;
-        _totalFiles = initialFiles.length;
-        _filesProcessed = 0;
-        _isLoading = true;
-      });
-
+      List<MP3File> initialFiles = result.files.map((f) => MP3File(name: f.name, size: f.size, desktopPath: f.path)).toList();
+      setState(() { _allFiles = initialFiles; _totalFiles = initialFiles.length; _filesProcessed = 0; _isLoading = true; });
       _processDesktopFiles(initialFiles);
     }
   }
@@ -333,16 +270,11 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         reader.readAsArrayBuffer(mp3File.webFile);
         await reader.onLoadEnd.first;
         final Uint8List bytes = reader.result as Uint8List;
-
         mp3File.artwork = _extractArtwork(bytes, mp3File.name);
-
         final blob = html.Blob([bytes]);
         mp3File.url = html.Url.createObjectUrlFromBlob(blob);
-      } catch (e) {
-        _log('Error processing ${mp3File.name}: $e');
-      }
-
-      if (i % 10 == 0 || i == files.length - 1) {
+      } catch (e) { _log('Error processing ${mp3File.name}: $e'); }
+      if (i % 5 == 0 || i == files.length - 1) {
         if (mounted) setState(() { _filesProcessed = i + 1; });
         await Future.delayed(const Duration(milliseconds: 1));
       }
@@ -351,23 +283,13 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   }
 
   void _handlePlayback(MP3File file) async {
-    if (_currentFile == file && _playerState == PlayerState.playing) {
-      await _audioPlayer.pause();
-      return;
-    }
-    if (_currentFile == file && _playerState == PlayerState.paused) {
-      await _audioPlayer.resume();
-      return;
-    }
-
+    if (_currentFile == file && _playerState == PlayerState.playing) { await _audioPlayer.pause(); return; }
+    if (_currentFile == file && _playerState == PlayerState.paused) { await _audioPlayer.resume(); return; }
     _log('Playing: ${file.name}');
     try {
       setState(() { _currentFile = file; });
-      if (kIsWeb && file.url != null) {
-        await _audioPlayer.play(UrlSource(file.url!));
-      } else if (!kIsWeb && file.desktopPath != null) {
-        await _audioPlayer.play(DeviceFileSource(file.desktopPath!));
-      }
+      if (kIsWeb && file.url != null) { await _audioPlayer.play(UrlSource(file.url!)); }
+      else if (!kIsWeb && file.desktopPath != null) { await _audioPlayer.play(DeviceFileSource(file.desktopPath!)); }
     } catch (e) { _log('PLAYBACK ERROR: $e'); }
   }
 
@@ -380,7 +302,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   void _copySelectedFiles() {
     if (_selectedFiles.isEmpty) return;
-
     if (kIsWeb) {
       for (var file in _selectedFiles) {
         final reader = html.FileReader();
@@ -388,23 +309,16 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         reader.onLoadEnd.listen((event) {
           final blob = html.Blob([reader.result], 'audio/mpeg');
           final url = html.Url.createObjectUrlFromBlob(blob);
-          html.AnchorElement(href: url)
-            ..setAttribute('download', file.name)
-            ..click();
+          html.AnchorElement(href: url)..setAttribute('download', file.name)..click();
           html.Url.revokeObjectUrl(url);
         });
       }
     } else {
       if (_destinationPath == null) return;
       for (var file in _selectedFiles) {
-        try {
-          final source = File(file.desktopPath!);
-          source.copySync(p.join(_destinationPath!, file.name));
-        } catch (e) { _log('Copy failed: $e'); }
+        try { File(file.desktopPath!).copySync(p.join(_destinationPath!, file.name)); } catch (e) { _log('Copy failed: $e'); }
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Copied ${_selectedFiles.length} files.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Copied ${_selectedFiles.length} files.')));
     }
   }
 
@@ -423,18 +337,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         actions: [
           IconButton(icon: const Icon(Icons.description), onPressed: _downloadLogs),
           const SizedBox(width: 8),
-          ElevatedButton.icon(
-            onPressed: _pickSourceFiles,
-            icon: const Icon(Icons.library_music),
-            label: const Text('Load MP3s'),
-          ),
+          ElevatedButton.icon(onPressed: _pickSourceFiles, icon: const Icon(Icons.library_music), label: const Text('Load MP3s')),
           if (!kIsWeb) ...[
             const SizedBox(width: 8),
-            ElevatedButton.icon(
-              onPressed: _pickDestinationDirectory,
-              icon: const Icon(Icons.folder_open),
-              label: Text(_destinationPath == null ? 'Set Dest' : 'Dest: ${p.basename(_destinationPath!)}'),
-            ),
+            ElevatedButton.icon(onPressed: _pickDestinationDirectory, icon: const Icon(Icons.folder_open), label: Text(_destinationPath == null ? 'Set Dest' : 'Dest: ${p.basename(_destinationPath!)}')),
           ],
           const SizedBox(width: 16),
         ],
@@ -451,18 +357,11 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                     children: [
                       const Icon(Icons.sync, color: Colors.blue),
                       const SizedBox(width: 12),
-                      Text(
-                        'Processing: $_filesProcessed / $_totalFiles Files (${((_filesProcessed / _totalFiles) * 100).toInt()}%)',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
-                      ),
+                      Text('Searching Artwork: $_filesProcessed / $_totalFiles Files (${((_filesProcessed / _totalFiles) * 100).toInt()}%)', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: _totalFiles > 0 ? _filesProcessed / _totalFiles : 0,
-                    minHeight: 8,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+                  LinearProgressIndicator(value: _totalFiles > 0 ? _filesProcessed / _totalFiles : 0, minHeight: 8, borderRadius: BorderRadius.circular(4)),
                 ],
               ),
             ),
@@ -477,28 +376,19 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                       ? const Center(child: Text('Click "Load MP3s" to select files.'))
                       : GridView.builder(
                           padding: const EdgeInsets.all(16),
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 180,
-                            childAspectRatio: 0.75,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                          ),
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 180, childAspectRatio: 0.75, crossAxisSpacing: 12, mainAxisSpacing: 12),
                           itemCount: _allFiles.length,
                           itemBuilder: (context, index) {
                             final file = _allFiles[index];
                             final isSelected = _selectedFiles.contains(file);
                             final isCurrent = _currentFile == file;
                             final isPlaying = isCurrent && _playerState == PlayerState.playing;
-
                             return GestureDetector(
                               onTap: () => _toggleSelection(file),
                               child: Card(
                                 clipBehavior: Clip.antiAlias,
                                 color: isSelected ? Colors.blue[50] : null,
-                                shape: RoundedRectangleBorder(
-                                  side: BorderSide(color: isSelected ? Colors.blue : Colors.transparent, width: 2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
+                                shape: RoundedRectangleBorder(side: BorderSide(color: isSelected ? Colors.blue : Colors.transparent, width: 2), borderRadius: BorderRadius.circular(8)),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
@@ -509,36 +399,19 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                           if (file.artwork != null)
                                             Image.memory(file.artwork!, fit: BoxFit.cover)
                                           else
-                                            Container(
-                                              color: Colors.grey[300],
-                                              child: const Icon(Icons.music_note, size: 48, color: Colors.grey),
-                                            ),
-                                          if (isSelected)
-                                            const Positioned(top: 4, left: 4, child: Icon(Icons.check_circle, color: Colors.blue)),
+                                            Container(color: Colors.grey[300], child: const Icon(Icons.music_note, size: 48, color: Colors.grey)),
+                                          if (isSelected) const Positioned(top: 4, left: 4, child: Icon(Icons.check_circle, color: Colors.blue)),
                                           Positioned(
-                                            bottom: 4,
-                                            right: 4,
+                                            bottom: 4, right: 4,
                                             child: GestureDetector(
                                               onTap: () => _handlePlayback(file),
-                                              child: Container(
-                                                padding: const EdgeInsets.all(4),
-                                                decoration: const BoxDecoration(color: Colors.white70, shape: BoxShape.circle),
-                                                child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.blue),
-                                              ),
+                                              child: Container(padding: const EdgeInsets.all(4), decoration: const BoxDecoration(color: Colors.white70, shape: BoxShape.circle), child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.blue)),
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                    Padding(
-                                      padding: const EdgeInsets.all(6.0),
-                                      child: Text(
-                                        file.name,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(fontSize: 11, fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal),
-                                      ),
-                                    ),
+                                    Padding(padding: const EdgeInsets.all(6.0), child: Text(file.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal))),
                                   ],
                                 ),
                               ),
@@ -558,15 +431,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text('Selected (${_selectedFiles.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                            ElevatedButton.icon(
-                              onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null,
-                              icon: Icon(kIsWeb ? Icons.download : Icons.copy),
-                              label: Text(kIsWeb ? 'Download' : 'Copy Now'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
+                            ElevatedButton.icon(onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null, icon: Icon(kIsWeb ? Icons.download : Icons.copy), label: Text(kIsWeb ? 'Download' : 'Copy Now'), style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white)),
                           ],
                         ),
                       ),

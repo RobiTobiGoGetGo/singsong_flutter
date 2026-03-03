@@ -2,7 +2,7 @@ name: singsong_flutter
 description: "SingSong App"
 publish_to: 'none'
 
-version: 1.0.24+25
+version: 1.0.25+26
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
