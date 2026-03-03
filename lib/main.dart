@@ -22,8 +22,16 @@ class SingSongApp extends StatelessWidget {
     return MaterialApp(
       title: 'SingSong',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.cyan,
+          brightness: Brightness.dark,
+        ),
         useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF1F1F1F),
+          elevation: 0,
+        ),
       ),
       home: const SingSongHomePage(),
     );
@@ -60,7 +68,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.34+35';
+  static const String appVersion = '1.0.36+37';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -480,131 +488,151 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('SingSong', style: TextStyle(fontWeight: FontWeight.bold)),
-            Text('v$appVersion', style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+            const Text('SingSong', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan)),
+            Text('v$appVersion', style: const TextStyle(fontSize: 10, color: Colors.grey)),
           ],
         ),
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         actions: [
-          IconButton(icon: const Icon(Icons.description), onPressed: _downloadLogs),
+          IconButton(icon: const Icon(Icons.description_outlined), onPressed: _downloadLogs),
           const SizedBox(width: 8),
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              ElevatedButton.icon(onPressed: _handlePickSourceFiles, icon: const Icon(Icons.library_music), label: const Text('Load MP3s')),
-              Text(sourceInfo, style: const TextStyle(fontSize: 10, color: Colors.blueGrey)),
+              ElevatedButton.icon(
+                onPressed: _handlePickSourceFiles, 
+                icon: const Icon(Icons.library_music_outlined), 
+                label: const Text('Load MP3s'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.cyan.withOpacity(0.1),
+                  foregroundColor: Colors.cyan,
+                ),
+              ),
+              Text(sourceInfo, style: const TextStyle(fontSize: 10, color: Colors.grey)),
             ],
           ),
           if (!kIsWeb) ...[
             const SizedBox(width: 8),
-            ElevatedButton.icon(onPressed: _pickDestinationDirectory, icon: const Icon(Icons.folder_open), label: Text(_destinationPath == null ? 'Set Dest' : 'Dest: ${p.basename(_destinationPath!)}')),
+            ElevatedButton.icon(
+              onPressed: _pickDestinationDirectory, 
+              icon: const Icon(Icons.folder_outlined), 
+              label: Text(_destinationPath == null ? 'Set Dest' : 'Dest: ${p.basename(_destinationPath!)}'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.grey.withOpacity(0.1),
+                foregroundColor: Colors.grey,
+              ),
+            ),
           ],
           const SizedBox(width: 16),
         ],
       ),
       body: Column(
         children: [
-          if (_isLoading)
-            Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.blue[50],
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.sync, color: Colors.blue),
-                      const SizedBox(width: 12),
-                      Text('Searching Artwork: $_filesProcessed / $_totalFiles Files (${((_filesProcessed / _totalFiles) * 100).toInt()}%)', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(value: _totalFiles > 0 ? _filesProcessed / _totalFiles : 0, minHeight: 8, borderRadius: BorderRadius.circular(4)),
-                ],
-              ),
-            ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return RawAutocomplete<String>(
-                  textEditingController: _filterController,
-                  focusNode: _filterFocusNode,
-                  optionsBuilder: (TextEditingValue textEditingValue) {
-                    if (textEditingValue.text.isEmpty) {
-                      return _filterHistory;
-                    }
-                    return _filterHistory.where((String option) {
-                      return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
-                    });
-                  },
-                  onSelected: (String selection) {
-                    setState(() { _filter = selection; });
-                    _onFilterSubmitted(selection);
-                  },
-                  fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                    return TextField(
-                      controller: controller,
-                      focusNode: focusNode,
-                      decoration: InputDecoration(
-                        hintText: 'Filter by name, title, or performer...',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_filter.isNotEmpty) 
-                              IconButton(icon: const Icon(Icons.clear), onPressed: () {
-                                controller.clear();
-                                setState(() { _filter = ''; });
-                              }),
-                            const Icon(Icons.arrow_drop_down),
-                            const SizedBox(width: 8),
-                          ],
-                        ),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                      ),
-                      onChanged: (value) => setState(() { _filter = value; }),
-                      onSubmitted: (value) {
-                        _onFilterSubmitted(value);
-                        onFieldSubmitted();
-                      },
-                    );
-                  },
-                  optionsViewBuilder: (context, onSelected, options) {
-                    return Align(
-                      alignment: Alignment.topLeft,
-                      child: Material(
-                        elevation: 4.0,
-                        child: Container(
-                          width: constraints.maxWidth,
-                          constraints: const BoxConstraints(maxHeight: 250),
-                          child: ListView.builder(
-                            padding: EdgeInsets.zero,
-                            shrinkWrap: true,
-                            itemCount: options.length,
-                            itemBuilder: (BuildContext context, int index) {
-                              final String option = options.elementAt(index);
-                              return ListTile(
-                                title: Text(option),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 18),
-                                  onPressed: () async {
-                                    setState(() { _filterHistory.remove(option); });
-                                    final prefs = await SharedPreferences.getInstance();
-                                    await prefs.setStringList('filterHistory', _filterHistory);
+            padding: const EdgeInsets.all(12.0),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return RawAutocomplete<String>(
+                        textEditingController: _filterController,
+                        focusNode: _filterFocusNode,
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          if (textEditingValue.text.isEmpty) return _filterHistory;
+                          return _filterHistory.where((String option) => option.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                        },
+                        onSelected: (String selection) {
+                          setState(() { _filter = selection; });
+                          _onFilterSubmitted(selection);
+                        },
+                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            decoration: InputDecoration(
+                              hintText: 'Filter music...',
+                              prefixIcon: const Icon(Icons.search, color: Colors.cyan),
+                              suffixIcon: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_filter.isNotEmpty) 
+                                    IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { controller.clear(); setState(() { _filter = ''; }); }),
+                                  const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                                  const SizedBox(width: 8),
+                                ],
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFF1E1E1E),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                              contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                            ),
+                            onChanged: (value) => setState(() { _filter = value; }),
+                            onSubmitted: (value) { _onFilterSubmitted(value); onFieldSubmitted(); },
+                          );
+                        },
+                        optionsViewBuilder: (context, onSelected, options) {
+                          return Align(
+                            alignment: Alignment.topLeft,
+                            child: Material(
+                              elevation: 8.0,
+                              borderRadius: BorderRadius.circular(12),
+                              color: const Color(0xFF2A2A2A),
+                              child: Container(
+                                width: constraints.maxWidth,
+                                constraints: const BoxConstraints(maxHeight: 250),
+                                child: ListView.builder(
+                                  padding: EdgeInsets.zero,
+                                  shrinkWrap: true,
+                                  itemCount: options.length,
+                                  itemBuilder: (BuildContext context, int index) {
+                                    final String option = options.elementAt(index);
+                                    return ListTile(
+                                      title: Text(option, style: const TextStyle(fontSize: 13)),
+                                      trailing: IconButton(
+                                        icon: const Icon(Icons.close, size: 16, color: Colors.grey),
+                                        onPressed: () async {
+                                          setState(() { _filterHistory.remove(option); });
+                                          final prefs = await SharedPreferences.getInstance();
+                                          await prefs.setStringList('filterHistory', _filterHistory);
+                                        },
+                                      ),
+                                      onTap: () => onSelected(option),
+                                    );
                                   },
                                 ),
-                                onTap: () => onSelected(option),
-                              );
-                            },
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    }
+                  ),
+                ),
+                if (_isLoading) ...[
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 2,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Indexing: $_filesProcessed / $_totalFiles', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyan)),
+                        const SizedBox(height: 4),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: _totalFiles > 0 ? _filesProcessed / _totalFiles : 0, 
+                            minHeight: 6,
+                            backgroundColor: Colors.cyan.withOpacity(0.1),
+                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.cyan),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                );
-              }
+                      ],
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           Expanded(
@@ -613,9 +641,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                 Expanded(
                   flex: 1,
                   child: Container(
-                    color: Colors.grey[100],
+                    color: const Color(0xFF121212),
                     child: _allFiles.isEmpty && !_isLoading
-                      ? const Center(child: Text('Click "Load MP3s" to select files.'))
+                      ? const Center(child: Text('Click "Load MP3s" to begin.', style: TextStyle(color: Colors.grey)))
                       : GridView.builder(
                           padding: const EdgeInsets.all(16),
                           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 180, childAspectRatio: 0.7, crossAxisSpacing: 12, mainAxisSpacing: 12),
@@ -629,8 +657,12 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                               onTap: () => _toggleSelection(file),
                               child: Card(
                                 clipBehavior: Clip.antiAlias,
-                                color: isSelected ? Colors.blue[50] : null,
-                                shape: RoundedRectangleBorder(side: BorderSide(color: isSelected ? Colors.blue : Colors.transparent, width: 2), borderRadius: BorderRadius.circular(8)),
+                                color: isSelected ? Colors.cyan.withOpacity(0.1) : const Color(0xFF1E1E1E),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  side: BorderSide(color: isSelected ? Colors.cyan : Colors.white10, width: 1.5), 
+                                  borderRadius: BorderRadius.circular(12)
+                                ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
@@ -641,25 +673,38 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                           if (file.artwork != null)
                                             Image.memory(file.artwork!, fit: BoxFit.cover)
                                           else
-                                            Container(color: Colors.grey[300], child: const Icon(Icons.music_note, size: 48, color: Colors.grey)),
-                                          if (isSelected) const Positioned(top: 4, left: 4, child: Icon(Icons.check_circle, color: Colors.blue)),
+                                            Container(
+                                              decoration: BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                  colors: [Colors.grey[800]!, Colors.grey[900]!],
+                                                ),
+                                              ),
+                                              child: const Icon(Icons.music_note, size: 48, color: Colors.white10)
+                                            ),
+                                          if (isSelected) const Positioned(top: 8, left: 8, child: Icon(Icons.check_circle, color: Colors.cyan, size: 20)),
                                           Positioned(
-                                            bottom: 4, right: 4,
+                                            bottom: 8, right: 8,
                                             child: GestureDetector(
                                               onTap: () => _handlePlayback(file),
-                                              child: Container(padding: const EdgeInsets.all(4), decoration: const BoxDecoration(color: Colors.white70, shape: BoxShape.circle), child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.blue)),
+                                              child: Container(
+                                                padding: const EdgeInsets.all(6), 
+                                                decoration: BoxDecoration(color: Colors.cyan, borderRadius: BorderRadius.circular(20)), 
+                                                child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.black, size: 20)
+                                              ),
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
                                     Padding(
-                                      padding: const EdgeInsets.all(6.0),
+                                      padding: const EdgeInsets.all(8.0),
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(file.title ?? file.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal)),
-                                          if (file.artist != null) Text(file.artist!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                          Text(file.title ?? file.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500, color: isCurrent ? Colors.cyan : Colors.white)),
+                                          Text(file.artist ?? 'Unknown Artist', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Colors.grey)),
                                         ],
                                       ),
                                     ),
@@ -671,7 +716,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                         ),
                   ),
                 ),
-                const VerticalDivider(width: 1),
+                const VerticalDivider(width: 1, color: Colors.white10),
                 Expanded(
                   flex: 1,
                   child: Column(
@@ -681,8 +726,13 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Selected (${_selectedFiles.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                            ElevatedButton.icon(onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null, icon: Icon(kIsWeb ? Icons.download : Icons.copy), label: Text(kIsWeb ? 'Download' : 'Copy Now'), style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white)),
+                            Text('Selected (${_selectedFiles.length})', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                            ElevatedButton.icon(
+                              onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null, 
+                              icon: Icon(kIsWeb ? Icons.download : Icons.copy, size: 18), 
+                              label: Text(kIsWeb ? 'Download' : 'Copy Now'), 
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black, elevation: 0)
+                            ),
                           ],
                         ),
                       ),
@@ -693,17 +743,17 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: Colors.grey[300],
-                                borderRadius: BorderRadius.circular(4),
+                                color: Colors.grey[900],
+                                borderRadius: BorderRadius.circular(6),
                               ),
                               clipBehavior: Clip.antiAlias,
                               child: file.artwork != null 
                                   ? Image.memory(file.artwork!, fit: BoxFit.cover)
-                                  : const Icon(Icons.music_note, size: 24, color: Colors.grey),
+                                  : const Icon(Icons.music_note, size: 20, color: Colors.white10),
                             ),
-                            title: Text(file.title ?? file.name, style: const TextStyle(fontSize: 11)),
-                            subtitle: file.artist != null ? Text(file.artist!, style: const TextStyle(fontSize: 10)) : null,
-                            trailing: IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => _toggleSelection(file)),
+                            title: Text(file.title ?? file.name, style: const TextStyle(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(file.artist ?? 'Unknown Artist', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                            trailing: IconButton(icon: const Icon(Icons.close, size: 16, color: Colors.grey), onPressed: () => _toggleSelection(file)),
                           )).toList(),
                         ),
                       ),
@@ -721,43 +771,43 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   Widget _buildPlayerBar() {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, -2))],
+      decoration: const BoxDecoration(
+        color: Color(0xFF1F1F1F),
+        border: Border(top: BorderSide(color: Colors.white10, width: 1)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
               Container(
-                width: 48, height: 48,
+                width: 52, height: 52,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
-                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.grey[900],
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: _currentFile?.artwork != null 
                     ? Image.memory(_currentFile!.artwork!, fit: BoxFit.cover)
-                    : const Icon(Icons.music_note, color: Colors.grey),
+                    : const Icon(Icons.music_note, color: Colors.white10),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_currentFile?.title ?? _currentFile?.name ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(_currentFile?.title ?? _currentFile?.name ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
                     Text(_currentFile?.artist ?? 'Unknown Artist', style: const TextStyle(color: Colors.grey, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
               IconButton(
-                icon: Icon(_playerState == PlayerState.playing ? Icons.pause : Icons.play_arrow),
+                icon: Icon(_playerState == PlayerState.playing ? Icons.pause_circle_filled : Icons.play_circle_filled, size: 36, color: Colors.cyan),
                 onPressed: () => _handlePlayback(_currentFile!),
               ),
               IconButton(
-                icon: const Icon(Icons.stop),
+                icon: const Icon(Icons.stop_circle_outlined, size: 28, color: Colors.grey),
                 onPressed: () async {
                   await _audioPlayer.stop();
                   setState(() { 
@@ -768,19 +818,30 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
               ),
             ],
           ),
+          const SizedBox(height: 4),
           Row(
             children: [
-              Text(_formatDuration(_position), style: const TextStyle(fontSize: 10)),
+              Text(_formatDuration(_position), style: const TextStyle(fontSize: 10, color: Colors.grey)),
               Expanded(
-                child: Slider(
-                  value: _position.inMilliseconds.toDouble(),
-                  max: _duration.inMilliseconds.toDouble() > 0 ? _duration.inMilliseconds.toDouble() : 1.0,
-                  onChanged: (val) {
-                    _audioPlayer.seek(Duration(milliseconds: val.toInt()));
-                  },
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 3,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                    activeTrackColor: Colors.cyan,
+                    inactiveTrackColor: Colors.white10,
+                    thumbColor: Colors.cyan,
+                  ),
+                  child: Slider(
+                    value: _position.inMilliseconds.toDouble(),
+                    max: _duration.inMilliseconds.toDouble() > 0 ? _duration.inMilliseconds.toDouble() : 1.0,
+                    onChanged: (val) {
+                      _audioPlayer.seek(Duration(milliseconds: val.toInt()));
+                    },
+                  ),
                 ),
               ),
-              Text(_formatDuration(_duration), style: const TextStyle(fontSize: 10)),
+              Text(_formatDuration(_duration), style: const TextStyle(fontSize: 10, color: Colors.grey)),
             ],
           ),
         ],
