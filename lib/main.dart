@@ -69,7 +69,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.37+38';
+  static const String appVersion = '1.0.38+39';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -486,55 +486,20 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            const Text('SingSong', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan)),
-            Text('v$appVersion', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-          ],
-        ),
-        actions: [
-          IconButton(icon: const Icon(Icons.description_outlined), onPressed: _downloadLogs),
-          const SizedBox(width: 8),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              ElevatedButton.icon(
-                onPressed: _handlePickSourceFiles, 
-                icon: const Icon(Icons.library_music_outlined), 
-                label: const Text('Load MP3s'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.cyan.withOpacity(0.1),
-                  foregroundColor: Colors.cyan,
-                ),
-              ),
-              Text(sourceInfo, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-            ],
-          ),
-          if (!kIsWeb) ...[
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              onPressed: _pickDestinationDirectory, 
-              icon: const Icon(Icons.folder_outlined), 
-              label: Text(_destinationPath == null ? 'Set Dest' : 'Dest: ${p.basename(_destinationPath!)}'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey.withOpacity(0.1),
-                foregroundColor: Colors.grey,
-              ),
-            ),
-          ],
-          const SizedBox(width: 16),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  flex: 3,
+                const Text('SingSong', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan, fontSize: 18)),
+                Text('v$appVersion', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+              ],
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 500),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       return RawAutocomplete<String>(
@@ -552,21 +517,22 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                           return TextField(
                             controller: controller,
                             focusNode: focusNode,
+                            style: const TextStyle(fontSize: 14),
                             decoration: InputDecoration(
                               hintText: 'Filter music...',
-                              prefixIcon: const Icon(Icons.search, color: Colors.cyan),
+                              prefixIcon: const Icon(Icons.search, color: Colors.cyan, size: 20),
                               suffixIcon: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   if (_filter.isNotEmpty) 
-                                    IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { controller.clear(); setState(() { _filter = ''; }); }),
-                                  const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                                    IconButton(icon: const Icon(Icons.clear, size: 16), onPressed: () { controller.clear(); setState(() { _filter = ''; }); }),
+                                  const Icon(Icons.arrow_drop_down, color: Colors.grey, size: 20),
                                   const SizedBox(width: 8),
                                 ],
                               ),
                               filled: true,
-                              fillColor: const Color(0xFF1E1E1E),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                              fillColor: Colors.black26,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
                               contentPadding: const EdgeInsets.symmetric(vertical: 0),
                             ),
                             onChanged: (value) => setState(() { _filter = value; }),
@@ -611,31 +577,46 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                     }
                   ),
                 ),
-                if (_isLoading) ...[
-                  const SizedBox(width: 16),
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Indexing: $_filesProcessed / $_totalFiles', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyan)),
-                        const SizedBox(height: 4),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: _totalFiles > 0 ? _filesProcessed / _totalFiles : 0, 
-                            minHeight: 6,
-                            backgroundColor: Colors.cyan.withOpacity(0.1),
-                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.cyan),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
+              ),
             ),
+          ],
+        ),
+        actions: [
+          if (_isLoading)
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: SizedBox(
+                width: 100,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${((_filesProcessed / (_totalFiles > 0 ? _totalFiles : 1)) * 100).toInt()}%', style: const TextStyle(fontSize: 10, color: Colors.cyan, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 2),
+                    LinearProgressIndicator(value: _totalFiles > 0 ? _filesProcessed / _totalFiles : 0, minHeight: 2, backgroundColor: Colors.white10),
+                  ],
+                ),
+              ),
+            ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'load') _handlePickSourceFiles();
+              if (value == 'dest') _pickDestinationDirectory();
+              if (value == 'logs') _downloadLogs();
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'load', child: ListTile(leading: Icon(Icons.library_music_outlined, size: 20), title: Text('Load MP3s', style: TextStyle(fontSize: 14)), dense: true)),
+              if (!kIsWeb) const PopupMenuItem(value: 'dest', child: ListTile(leading: Icon(Icons.folder_outlined, size: 20), title: Text('Set Destination', style: TextStyle(fontSize: 14)), dense: true)),
+              const PopupMenuItem(value: 'logs', child: ListTile(leading: Icon(Icons.description_outlined, size: 20), title: Text('Download Logs', style: TextStyle(fontSize: 14)), dense: true)),
+              PopupMenuItem(enabled: false, child: Text(sourceInfo, style: const TextStyle(fontSize: 11, color: Colors.grey))),
+            ],
           ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Column(
+        children: [
           Expanded(
             child: Row(
               children: [
@@ -644,7 +625,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                   child: Container(
                     color: const Color(0xFF121212),
                     child: _allFiles.isEmpty && !_isLoading
-                      ? const Center(child: Text('Click "Load MP3s" to begin.', style: TextStyle(color: Colors.grey)))
+                      ? const Center(child: Text('Open the menu to load MP3s.', style: TextStyle(color: Colors.grey)))
                       : GridView.builder(
                           padding: const EdgeInsets.all(16),
                           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 180, childAspectRatio: 0.7, crossAxisSpacing: 12, mainAxisSpacing: 12),
