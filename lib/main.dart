@@ -60,7 +60,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.33+34';
+  static const String appVersion = '1.0.34+35';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -78,6 +78,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   String _filter = '';
   final TextEditingController _filterController = TextEditingController();
+  final FocusNode _filterFocusNode = FocusNode();
   List<String> _filterHistory = [];
 
   Duration _duration = Duration.zero;
@@ -118,6 +119,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     _cleanupWebUrls();
     _audioPlayer.dispose();
     _filterController.dispose();
+    _filterFocusNode.dispose();
     super.dispose();
   }
 
@@ -392,6 +394,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   Future<void> _play(MP3File file) async {
     _log('Playing: ${file.name}');
+    // Also save current filter if active when playing a song
+    if (_filter.trim().isNotEmpty) {
+      _onFilterSubmitted(_filter);
+    }
     try {
       setState(() { 
         _currentFile = file; 
@@ -449,10 +455,11 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     if (!_filterHistory.contains(trimmed)) {
       setState(() {
         _filterHistory.insert(0, trimmed);
-        if (_filterHistory.length > 10) _filterHistory.removeLast();
+        if (_filterHistory.length > 20) _filterHistory.removeLast();
       });
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('filterHistory', _filterHistory);
+      _log('Filter history updated: $trimmed');
     }
   }
 
@@ -525,7 +532,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
               builder: (context, constraints) {
                 return RawAutocomplete<String>(
                   textEditingController: _filterController,
-                  focusNode: FocusNode(),
+                  focusNode: _filterFocusNode,
                   optionsBuilder: (TextEditingValue textEditingValue) {
                     if (textEditingValue.text.isEmpty) {
                       return _filterHistory;
@@ -536,6 +543,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                   },
                   onSelected: (String selection) {
                     setState(() { _filter = selection; });
+                    _onFilterSubmitted(selection);
                   },
                   fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                     return TextField(
@@ -573,7 +581,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                         elevation: 4.0,
                         child: Container(
                           width: constraints.maxWidth,
-                          constraints: const BoxConstraints(maxHeight: 200),
+                          constraints: const BoxConstraints(maxHeight: 250),
                           child: ListView.builder(
                             padding: EdgeInsets.zero,
                             shrinkWrap: true,
@@ -582,6 +590,14 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                               final String option = options.elementAt(index);
                               return ListTile(
                                 title: Text(option),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete_outline, size: 18),
+                                  onPressed: () async {
+                                    setState(() { _filterHistory.remove(option); });
+                                    final prefs = await SharedPreferences.getInstance();
+                                    await prefs.setStringList('filterHistory', _filterHistory);
+                                  },
+                                ),
                                 onTap: () => onSelected(option),
                               );
                             },
