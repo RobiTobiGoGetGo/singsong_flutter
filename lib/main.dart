@@ -33,6 +33,10 @@ class SingSongApp extends StatelessWidget {
           backgroundColor: Color(0xFF1F1F1F),
           elevation: 0,
         ),
+        textTheme: const TextTheme(
+          titleMedium: TextStyle(fontFamily: 'sans-serif', fontWeight: FontWeight.w600),
+          bodyMedium: TextStyle(fontFamily: 'sans-serif', fontWeight: FontWeight.w300),
+        ),
       ),
       home: const SingSongHomePage(),
     );
@@ -69,7 +73,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.39+40';
+  static const String appVersion = '1.0.40+41';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -582,22 +586,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           ],
         ),
         actions: [
-          if (_isLoading)
-            Padding(
-              padding: const EdgeInsets.only(right: 16.0),
-              child: SizedBox(
-                width: 100,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${((_filesProcessed / (_totalFiles > 0 ? _totalFiles : 1)) * 100).toInt()}%', style: const TextStyle(fontSize: 10, color: Colors.cyan, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 2),
-                    LinearProgressIndicator(value: _totalFiles > 0 ? _filesProcessed / _totalFiles : 0, minHeight: 2, backgroundColor: Colors.white10),
-                  ],
-                ),
-              ),
-            ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
@@ -617,156 +605,172 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       ),
       body: Stack(
         children: [
-          Row(
+          Column(
             children: [
+              if (_isLoading)
+                LinearProgressIndicator(
+                  value: _totalFiles > 0 ? _filesProcessed / _totalFiles : 0,
+                  minHeight: 2,
+                  backgroundColor: Colors.white10,
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.cyan),
+                ),
               Expanded(
-                flex: 1,
-                child: Container(
-                  color: const Color(0xFF121212),
-                  child: _allFiles.isEmpty && !_isLoading
-                    ? const Center(child: Text('Open the menu to load MP3s.', style: TextStyle(color: Colors.grey)))
-                    : GridView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 180, childAspectRatio: 0.7, crossAxisSpacing: 12, mainAxisSpacing: 12),
-                        itemCount: filteredFiles.length,
-                        itemBuilder: (context, index) {
-                          final file = filteredFiles[index];
-                          final isSelected = _selectedFiles.contains(file);
-                          final isCurrent = _currentFile == file;
-                          final isPlaying = isCurrent && _playerState == PlayerState.playing;
-                          
-                          return MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: GestureDetector(
-                              onTap: () => _toggleSelection(file),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: BackdropFilter(
-                                  filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: isSelected ? Colors.cyan.withOpacity(0.15) : Colors.white.withOpacity(0.05),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: Container(
+                        color: const Color(0xFF121212),
+                        child: _allFiles.isEmpty && !_isLoading
+                          ? const Center(child: Text('Open the menu to load MP3s.', style: TextStyle(color: Colors.grey)))
+                          : GridView.builder(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 180, childAspectRatio: 0.7, crossAxisSpacing: 12, mainAxisSpacing: 12),
+                              itemCount: filteredFiles.length,
+                              itemBuilder: (context, index) {
+                                final file = filteredFiles[index];
+                                final isSelected = _selectedFiles.contains(file);
+                                final isCurrent = _currentFile == file;
+                                final isPlaying = isCurrent && _playerState == PlayerState.playing;
+                                
+                                return MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: GestureDetector(
+                                    onTap: () => _toggleSelection(file),
+                                    child: ClipRRect(
                                       borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: isSelected ? Colors.cyan.withOpacity(0.5) : Colors.white.withOpacity(0.1),
-                                        width: 1.5,
+                                      child: BackdropFilter(
+                                        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: isSelected ? Colors.cyan.withOpacity(0.15) : Colors.white.withOpacity(0.05),
+                                            borderRadius: BorderRadius.circular(16),
+                                            border: Border.all(
+                                              color: isSelected ? Colors.cyan.withOpacity(0.5) : Colors.white.withOpacity(0.1),
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                                            children: [
+                                              Expanded(
+                                                child: Stack(
+                                                  fit: StackFit.expand,
+                                                  children: [
+                                                    if (file.artwork != null)
+                                                      Image.memory(file.artwork!, fit: BoxFit.cover)
+                                                    else
+                                                      Container(
+                                                        decoration: BoxDecoration(
+                                                          gradient: LinearGradient(
+                                                            begin: Alignment.topLeft,
+                                                            end: Alignment.bottomRight,
+                                                            colors: [Colors.grey[800]!, Colors.grey[900]!],
+                                                          ),
+                                                        ),
+                                                        child: const Icon(Icons.music_note, size: 48, color: Colors.white10)
+                                                      ),
+                                                    if (isSelected) const Positioned(top: 8, left: 8, child: Icon(Icons.check_circle, color: Colors.cyan, size: 22)),
+                                                    Positioned(
+                                                      bottom: 8, right: 8,
+                                                      child: GestureDetector(
+                                                        onTap: () => _handlePlayback(file),
+                                                        child: Container(
+                                                          padding: const EdgeInsets.all(8), 
+                                                          decoration: BoxDecoration(
+                                                            color: Colors.cyan, 
+                                                            shape: BoxShape.circle,
+                                                            boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))]
+                                                          ), 
+                                                          child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.black, size: 20)
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.all(10.0),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      file.title ?? file.name, 
+                                                      maxLines: 1, 
+                                                      overflow: TextOverflow.ellipsis, 
+                                                      style: const TextStyle(
+                                                        fontSize: 12, 
+                                                        fontWeight: FontWeight.w600, 
+                                                        color: Colors.white,
+                                                        fontFamily: 'Montserrat',
+                                                      ).copyWith(color: isCurrent ? Colors.cyan : Colors.white.withOpacity(0.9), fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600)
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      file.artist ?? 'Unknown Artist', 
+                                                      maxLines: 1, 
+                                                      overflow: TextOverflow.ellipsis, 
+                                                      style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w300, fontFamily: 'Montserrat')
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                        Expanded(
-                                          child: Stack(
-                                            fit: StackFit.expand,
-                                            children: [
-                                              if (file.artwork != null)
-                                                Image.memory(file.artwork!, fit: BoxFit.cover)
-                                              else
-                                                Container(
-                                                  decoration: BoxDecoration(
-                                                    gradient: LinearGradient(
-                                                      begin: Alignment.topLeft,
-                                                      end: Alignment.bottomRight,
-                                                      colors: [Colors.grey[800]!, Colors.grey[900]!],
-                                                    ),
-                                                  ),
-                                                  child: const Icon(Icons.music_note, size: 48, color: Colors.white10)
-                                                ),
-                                              if (isSelected) const Positioned(top: 8, left: 8, child: Icon(Icons.check_circle, color: Colors.cyan, size: 22)),
-                                              Positioned(
-                                                bottom: 8, right: 8,
-                                                child: GestureDetector(
-                                                  onTap: () => _handlePlayback(file),
-                                                  child: Container(
-                                                    padding: const EdgeInsets.all(8), 
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.cyan, 
-                                                      shape: BoxShape.circle,
-                                                      boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))]
-                                                    ), 
-                                                    child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.black, size: 20)
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.all(10.0),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                file.title ?? file.name, 
-                                                maxLines: 1, 
-                                                overflow: TextOverflow.ellipsis, 
-                                                style: TextStyle(
-                                                  fontSize: 12, 
-                                                  fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600, 
-                                                  color: isCurrent ? Colors.cyan : Colors.white.withOpacity(0.9)
-                                                )
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                file.artist ?? 'Unknown Artist', 
-                                                maxLines: 1, 
-                                                overflow: TextOverflow.ellipsis, 
-                                                style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.5))
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
                                   ),
-                                ),
-                              ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
-                ),
-              ),
-              const VerticalDivider(width: 1, color: Colors.white10),
-              Expanded(
-                flex: 1,
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Selected (${_selectedFiles.length})', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                          ElevatedButton.icon(
-                            onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null, 
-                            icon: Icon(kIsWeb ? Icons.download : Icons.copy, size: 18), 
-                            label: Text(kIsWeb ? 'Download' : 'Copy Now'), 
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black, elevation: 0)
-                          ),
-                        ],
                       ),
                     ),
+                    const VerticalDivider(width: 1, color: Colors.white10),
                     Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.only(bottom: 100),
-                        children: _selectedFiles.map((file) => ListTile(
-                          leading: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[900],
-                              borderRadius: BorderRadius.circular(8),
+                      flex: 1,
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Selected', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                                Text('(${_selectedFiles.length})', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                const Spacer(),
+                                ElevatedButton.icon(
+                                  onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null, 
+                                  icon: Icon(kIsWeb ? Icons.download : Icons.copy, size: 18), 
+                                  label: Text(kIsWeb ? 'Download' : 'Copy Now'), 
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black, elevation: 0)
+                                ),
+                              ],
                             ),
-                            clipBehavior: Clip.antiAlias,
-                            child: file.artwork != null 
-                                ? Image.memory(file.artwork!, fit: BoxFit.cover)
-                                : const Icon(Icons.music_note, size: 20, color: Colors.white10),
                           ),
-                          title: Text(file.title ?? file.name, style: const TextStyle(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
-                          subtitle: Text(file.artist ?? 'Unknown Artist', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                          trailing: IconButton(icon: const Icon(Icons.close, size: 16, color: Colors.grey), onPressed: () => _toggleSelection(file)),
-                        )).toList(),
+                          Expanded(
+                            child: ListView(
+                              padding: const EdgeInsets.only(bottom: 100),
+                              children: _selectedFiles.map((file) => ListTile(
+                                leading: Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[900],
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: file.artwork != null 
+                                      ? Image.memory(file.artwork!, fit: BoxFit.cover)
+                                      : const Icon(Icons.music_note, size: 20, color: Colors.white10),
+                                ),
+                                title: Text(file.title ?? file.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Montserrat'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                subtitle: Text(file.artist ?? 'Unknown Artist', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w300, fontFamily: 'Montserrat', color: Colors.grey)),
+                                trailing: IconButton(icon: const Icon(Icons.close, size: 16, color: Colors.grey), onPressed: () => _toggleSelection(file)),
+                              )).toList(),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -839,8 +843,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(_currentFile?.title ?? _currentFile?.name ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-                          Text('${_formatDuration(_position)} / ${_formatDuration(_duration)}', style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                          Text(_currentFile?.title ?? _currentFile?.name ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white, fontFamily: 'Montserrat'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text('${_formatDuration(_position)} / ${_formatDuration(_duration)}', style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w300, fontFamily: 'Montserrat')),
                         ],
                       ),
                     ),
