@@ -56,7 +56,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.30+31';
+  static const String appVersion = '1.0.31+32';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -70,6 +70,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   bool _isLoading = false;
   int _filesProcessed = 0;
   int _totalFiles = 0;
+  int _currentLoadId = 0;
 
   @override
   void initState() {
@@ -182,6 +183,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         }
       }
 
+      _currentLoadId++;
       setState(() {
         _allFiles = loadedFiles;
         _totalFiles = loadedFiles.length;
@@ -189,12 +191,13 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         _isLoading = true;
       });
 
-      _processDesktopFiles(loadedFiles);
+      _processDesktopFiles(loadedFiles, _currentLoadId);
     } catch (e) { _log('Auto-load failed: $e'); }
   }
 
-  Future<void> _processDesktopFiles(List<MP3File> files) async {
+  Future<void> _processDesktopFiles(List<MP3File> files, int loadId) async {
     for (int i = 0; i < files.length; i++) {
+      if (loadId != _currentLoadId) return;
       final mp3File = files[i];
       try {
         final file = File(mp3File.desktopPath!);
@@ -205,11 +208,11 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       }
 
       if (i % 5 == 0 || i == files.length - 1) {
-        if (mounted) setState(() { _filesProcessed = i + 1; });
+        if (mounted && loadId == _currentLoadId) setState(() { _filesProcessed = i + 1; });
         await Future.delayed(const Duration(milliseconds: 1));
       }
     }
-    if (mounted) setState(() { _isLoading = false; });
+    if (mounted && loadId == _currentLoadId) setState(() { _isLoading = false; });
   }
 
   Future<void> _pickDestinationDirectory() async {
@@ -222,6 +225,43 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         setState(() { _destinationPath = selectedDirectory; });
       }
     } catch (e) { _log('Error picking directory: $e'); }
+  }
+
+  Future<void> _handlePickSourceFiles() async {
+    if (_isLoading) {
+      final bool? reset = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Loading in Progress'),
+          content: const Text('The current loading process will be terminated and all file lists will be emptied. Do you want to continue?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Continue current load'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+              child: const Text('Reset load MP3'),
+            ),
+          ],
+        ),
+      );
+
+      if (reset != true) return;
+      
+      _currentLoadId++;
+      _cleanupWebUrls();
+      setState(() {
+        _allFiles = [];
+        _selectedFiles.clear();
+        _filesProcessed = 0;
+        _totalFiles = 0;
+        _isLoading = false;
+        _sourcePath = null;
+      });
+    }
+    _pickSourceFiles();
   }
 
   Future<void> _pickSourceFiles() async {
@@ -240,6 +280,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             initialFiles.add(MP3File(name: file.name, size: file.size, webFile: file));
           }
         }
+        _currentLoadId++;
         setState(() {
           _allFiles = initialFiles;
           _totalFiles = initialFiles.length;
@@ -247,7 +288,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           _isLoading = true;
           _sourcePath = 'Selected Files';
         });
-        _processWebFiles(initialFiles);
+        _processWebFiles(initialFiles, _currentLoadId);
       });
     } else {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -271,6 +312,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         desktopPath: f.path,
       )).toList();
       
+      _currentLoadId++;
       setState(() {
         _allFiles = initialFiles;
         _totalFiles = initialFiles.length;
@@ -278,12 +320,13 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         _isLoading = true;
         _sourcePath = folderPath;
       });
-      _processDesktopFiles(initialFiles);
+      _processDesktopFiles(initialFiles, _currentLoadId);
     }
   }
 
-  Future<void> _processWebFiles(List<MP3File> files) async {
+  Future<void> _processWebFiles(List<MP3File> files, int loadId) async {
     for (int i = 0; i < files.length; i++) {
+      if (loadId != _currentLoadId) return;
       final mp3File = files[i];
       try {
         final reader = html.FileReader();
@@ -295,11 +338,11 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         mp3File.url = html.Url.createObjectUrlFromBlob(blob);
       } catch (e) { _log('Error processing ${mp3File.name}: $e'); }
       if (i % 5 == 0 || i == files.length - 1) {
-        if (mounted) setState(() { _filesProcessed = i + 1; });
+        if (mounted && loadId == _currentLoadId) setState(() { _filesProcessed = i + 1; });
         await Future.delayed(const Duration(milliseconds: 1));
       }
     }
-    if (mounted) setState(() { _isLoading = false; });
+    if (mounted && loadId == _currentLoadId) setState(() { _isLoading = false; });
   }
 
   void _handlePlayback(MP3File file) async {
@@ -365,7 +408,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              ElevatedButton.icon(onPressed: _pickSourceFiles, icon: const Icon(Icons.library_music), label: const Text('Load MP3s')),
+              ElevatedButton.icon(onPressed: _handlePickSourceFiles, icon: const Icon(Icons.library_music), label: const Text('Load MP3s')),
               Text(sourceInfo, style: const TextStyle(fontSize: 10, color: Colors.blueGrey)),
             ],
           ),
