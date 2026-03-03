@@ -56,7 +56,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.23+24';
+  static const String appVersion = '1.0.24+25';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -131,31 +131,61 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     } catch (e) { _log('Error loading paths: $e'); }
   }
 
-  Uint8List? _extractArtwork(Uint8List bytes) {
+  Uint8List? _extractArtwork(Uint8List bytes, String fileName) {
     try {
+      _log('[$fileName] Attempting artwork extraction. Byte length: ${bytes.length}');
       final id3 = MP3Instance(bytes);
       final meta = id3.getMetaTags();
-      if (meta == null) return null;
+      if (meta == null) {
+        _log('[$fileName] No metadata found.');
+        return null;
+      }
+
+      _log('[$fileName] Tag keys found: ${meta.keys.toList()}');
 
       dynamic apicData;
       if (meta.containsKey('APIC')) {
         apicData = meta['APIC'];
+        _log('[$fileName] Found APIC tag.');
       } else if (meta.containsKey('PIC')) {
         apicData = meta['PIC'];
+        _log('[$fileName] Found legacy PIC tag.');
       }
 
-      if (apicData == null) return null;
+      if (apicData == null) {
+        _log('[$fileName] No artwork tag found.');
+        return null;
+      }
 
-      if (apicData is Map && apicData.containsKey('base64')) {
-        return base64Decode(apicData['base64']);
+      _log('[$fileName] Artwork data runtime type: ${apicData.runtimeType}');
+
+      if (apicData is Map) {
+        _log('[$fileName] APIC data is a Map. Keys: ${apicData.keys.toList()}');
+        if (apicData.containsKey('base64')) {
+          _log('[$fileName] Found base64 in APIC map.');
+          return base64Decode(apicData['base64']);
+        }
+        if (apicData.containsKey('data')) {
+          _log('[$fileName] Found data in APIC map.');
+          final data = apicData['data'];
+          if (data is Uint8List) return data;
+          if (data is List<int>) return Uint8List.fromList(data);
+        }
       }
       
-      if (apicData is Uint8List) return apicData;
-      if (apicData is List<int>) return Uint8List.fromList(apicData);
+      if (apicData is Uint8List) {
+        _log('[$fileName] Artwork data is Uint8List. Length: ${apicData.length}');
+        return apicData;
+      }
+      if (apicData is List<int>) {
+        _log('[$fileName] Artwork data is List<int>. Length: ${apicData.length}');
+        return Uint8List.fromList(apicData);
+      }
 
+      _log('[$fileName] Unknown artwork data format.');
       return null;
     } catch (e) {
-      debugPrint('Artwork extraction error: $e');
+      _log('[$fileName] Extraction error: $e');
       return null;
     }
   }
@@ -197,7 +227,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       try {
         final file = File(mp3File.desktopPath!);
         final bytes = await file.readAsBytes();
-        mp3File.artwork = _extractArtwork(bytes);
+        mp3File.artwork = _extractArtwork(bytes, mp3File.name);
       } catch (e) {
         _log('Meta error for ${mp3File.name}: $e');
       }
@@ -304,7 +334,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         await reader.onLoadEnd.first;
         final Uint8List bytes = reader.result as Uint8List;
 
-        mp3File.artwork = _extractArtwork(bytes);
+        mp3File.artwork = _extractArtwork(bytes, mp3File.name);
 
         final blob = html.Blob([bytes]);
         mp3File.url = html.Url.createObjectUrlFromBlob(blob);
