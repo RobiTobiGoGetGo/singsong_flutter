@@ -56,7 +56,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.27+28';
+  static const String appVersion = '1.0.30+31';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -226,7 +226,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   Future<void> _pickSourceFiles() async {
     if (kIsWeb) {
-      final input = html.FileUploadInputElement()..multiple = true..accept = '.mp3';
+      final input = html.FileUploadInputElement()
+        ..multiple = true
+        ..accept = '.mp3';
       input.click();
       input.onChange.listen((event) async {
         final files = input.files;
@@ -243,22 +245,39 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           _totalFiles = initialFiles.length;
           _filesProcessed = 0;
           _isLoading = true;
-          _sourcePath = 'Web Session';
+          _sourcePath = 'Selected Files';
         });
         _processWebFiles(initialFiles);
       });
     } else {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['mp3'], allowMultiple: true);
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp3'],
+        allowMultiple: true,
+      );
       if (result == null || result.files.isEmpty) return;
+      
       final firstPath = result.files.first.path;
+      String? folderPath;
       if (firstPath != null) {
-        final dir = p.dirname(firstPath);
+        folderPath = p.dirname(firstPath);
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('sourcePath', dir);
-        setState(() { _sourcePath = dir; });
+        await prefs.setString('sourcePath', folderPath);
       }
-      List<MP3File> initialFiles = result.files.map((f) => MP3File(name: f.name, size: f.size, desktopPath: f.path)).toList();
-      setState(() { _allFiles = initialFiles; _totalFiles = initialFiles.length; _filesProcessed = 0; _isLoading = true; });
+      
+      List<MP3File> initialFiles = result.files.map((f) => MP3File(
+        name: f.name,
+        size: f.size,
+        desktopPath: f.path,
+      )).toList();
+      
+      setState(() {
+        _allFiles = initialFiles;
+        _totalFiles = initialFiles.length;
+        _filesProcessed = 0;
+        _isLoading = true;
+        _sourcePath = folderPath;
+      });
       _processDesktopFiles(initialFiles);
     }
   }
@@ -325,12 +344,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    String sourceInfo = _sourcePath ?? 'No directory loaded';
-    if (!kIsWeb && _sourcePath != null) {
-      sourceInfo = '${p.basename(_sourcePath!)} (${_allFiles.length} files)';
-    } else if (kIsWeb && _allFiles.isNotEmpty) {
-      sourceInfo = 'Web Session (${_allFiles.length} files)';
-    }
+    String sourceInfo = _sourcePath != null 
+        ? '${kIsWeb ? _sourcePath : p.basename(_sourcePath!)} (${_allFiles.length} files)'
+        : 'No files loaded';
 
     return Scaffold(
       appBar: AppBar(

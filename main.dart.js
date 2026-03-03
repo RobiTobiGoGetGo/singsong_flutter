@@ -68523,7 +68523,7 @@ al(){return new A.zL(A.aqX(),B.eI,A.d([],t._o),A.aH(t.n_),A.d([],t.s))}}
 A.zL.prototype={
 aw(){var s,r=this
 r.aU()
-r.jx("App started v1.0.27+28")
+r.jx("App started v1.0.30+31")
 r.ro().bm(new A.abX(),t.P)
 s=r.d.ay
 new A.bQ(s,A.o(s).h("bQ<1>")).j5(new A.abY(r))},
@@ -68681,38 +68681,35 @@ if(r==null)r=s.a(r)
 q=new FileReader()
 q.readAsArrayBuffer(r.e)
 A.l7(q,"loadend",new A.abI(q,r),!1)}},
-S(a){var s,r,q,p,o,n,m,l,k,j,i=this,h=null,g=i.x
-if(g==null)g="No directory loaded"
-s=i.r.length
-if(s!==0)g="Web Session ("+s+" files)"
-s=t.l
-r=A.te(A.d([B.NZ,A.q5("v1.0.27+28",h,h,B.L0)],s),B.b2,B.ar)
-q=A.al(a).ax
-p=q.d
-q=p==null?q.b:p
-p=A.d([A.afj(h,h,B.AO,h,h,i.gWv(),h,h,h),B.J3,A.te(A.d([A.aiW(B.AR,B.O_,i.ga0A(),h),A.q5(g,h,h,B.M2)],s),B.c8,B.q2)],s)
-p.push(B.J2)
-o=A.d([],s)
-if(i.Q){n=i.as
-m=i.at
-m=A.Gs(A.d([B.AT,B.J1,A.q5("Searching Artwork: "+n+" / "+m+" Files ("+B.c.dT(n/m*100)+"%)",h,h,B.MP)],s),B.av,B.ar,B.df,0)
-n=i.at
-n=n>0?i.as/n:0
-o.push(A.oE(A.te(A.d([m,B.J4,new A.uQ(8,A.rQ(4),n,h,h,h,h,h,h)],s),B.av,B.ar),B.J,B.e4,h,h,h,B.Ad,h))}n=i.r.length
-if(n===0&&!i.Q)n=B.yj
-else n=new A.DP(B.xS,new A.a45(new A.abU(i),n,!0,!0,!0,h),B.ky,B.aK,!1,h,h,B.jh,!1,h,n,B.aN,h,h,B.aq,B.an,h)
-n=A.Ds(A.oE(n,B.J,B.kg,h,h,h,h,h),1)
-m=i.w
-l=m.a
-k=A.q5("Selected ("+l+")",h,h,B.MQ)
-l=l!==0?i.gVO():h
-l=A.Gs(A.d([k,A.aiW(A.afi(B.AH,h,h),A.q5("Download",h,h,h),l,A.asl(h,h,B.Fd,h,h,h,h,h,h,B.j,h,h,h,h,h,h,h,h,h,h))],s),B.av,B.q3,B.df,0)
-k=A.o(m).h("iR<1,ms>")
-m=A.a0(new A.iR(m,new A.abV(i),k),k.h("k.E"))
-k=A.aN([null,0],t.LO,t.S)
-j=m.length
-o.push(A.Ds(A.Gs(A.d([n,B.OU,A.Ds(A.te(A.d([new A.fF(B.ky,l,h),A.Ds(new A.Er(new A.a47(!0,!0,!0,m,k),h,B.aK,!1,h,h,B.jh,!1,h,j,B.aN,h,h,B.aq,B.an,h),1)],s),B.av,B.ar),1)],s),B.av,B.ar,B.df,0),1))
-return new A.wc(new A.rJ(r,p,q,new A.Mu(h,h,1/0,56),h),A.te(o,B.av,B.ar),h)}}
+S(a){var s,r,q,p,o,n,m,l,k,j=this,i=null,h=j.x,g=h!=null?h+" ("+j.r.length+" files)":"No files loaded"
+h=t.l
+s=A.te(A.d([B.NZ,A.q5("v1.0.30+31",i,i,B.L0)],h),B.b2,B.ar)
+r=A.al(a).ax
+q=r.d
+r=q==null?r.b:q
+q=A.d([A.afj(i,i,B.AO,i,i,j.gWv(),i,i,i),B.J3,A.te(A.d([A.aiW(B.AR,B.O_,j.ga0A(),i),A.q5(g,i,i,B.M2)],h),B.c8,B.q2)],h)
+q.push(B.J2)
+p=A.d([],h)
+if(j.Q){o=j.as
+n=j.at
+n=A.Gs(A.d([B.AT,B.J1,A.q5("Searching Artwork: "+o+" / "+n+" Files ("+B.c.dT(o/n*100)+"%)",i,i,B.MP)],h),B.av,B.ar,B.df,0)
+o=j.at
+o=o>0?j.as/o:0
+p.push(A.oE(A.te(A.d([n,B.J4,new A.uQ(8,A.rQ(4),o,i,i,i,i,i,i)],h),B.av,B.ar),B.J,B.e4,i,i,i,B.Ad,i))}o=j.r.length
+if(o===0&&!j.Q)o=B.yj
+else o=new A.DP(B.xS,new A.a45(new A.abU(j),o,!0,!0,!0,i),B.ky,B.aK,!1,i,i,B.jh,!1,i,o,B.aN,i,i,B.aq,B.an,i)
+o=A.Ds(A.oE(o,B.J,B.kg,i,i,i,i,i),1)
+n=j.w
+m=n.a
+l=A.q5("Selected ("+m+")",i,i,B.MQ)
+m=m!==0?j.gVO():i
+m=A.Gs(A.d([l,A.aiW(A.afi(B.AH,i,i),A.q5("Download",i,i,i),m,A.asl(i,i,B.Fd,i,i,i,i,i,i,B.j,i,i,i,i,i,i,i,i,i,i))],h),B.av,B.q3,B.df,0)
+l=A.o(n).h("iR<1,ms>")
+n=A.a0(new A.iR(n,new A.abV(j),l),l.h("k.E"))
+l=A.aN([null,0],t.LO,t.S)
+k=n.length
+p.push(A.Ds(A.Gs(A.d([o,B.OU,A.Ds(A.te(A.d([new A.fF(B.ky,m,i),A.Ds(new A.Er(new A.a47(!0,!0,!0,n,l),i,B.aK,!1,i,i,B.jh,!1,i,k,B.aN,i,i,B.aq,B.an,i),1)],h),B.av,B.ar),1)],h),B.av,B.ar,B.df,0),1))
+return new A.wc(new A.rJ(s,q,r,new A.Mu(i,i,1/0,56),i),A.te(p,B.av,B.ar),i)}}
 A.abX.prototype={
 $1(a){},
 $S:28}
@@ -68755,7 +68752,7 @@ s.r=r
 s.at=r.length
 s.as=0
 s.Q=!0
-s.x="Web Session"},
+s.x="Selected Files"},
 $S:0}
 A.abO.prototype={
 $0(){this.a.as=this.b+1},
