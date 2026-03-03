@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, Uint8List;
 import 'package:id3/id3.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:ui';
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 
@@ -68,7 +69,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.36+37';
+  static const String appVersion = '1.0.37+38';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -653,62 +654,92 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                             final isSelected = _selectedFiles.contains(file);
                             final isCurrent = _currentFile == file;
                             final isPlaying = isCurrent && _playerState == PlayerState.playing;
-                            return GestureDetector(
-                              onTap: () => _toggleSelection(file),
-                              child: Card(
-                                clipBehavior: Clip.antiAlias,
-                                color: isSelected ? Colors.cyan.withOpacity(0.1) : const Color(0xFF1E1E1E),
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  side: BorderSide(color: isSelected ? Colors.cyan : Colors.white10, width: 1.5), 
-                                  borderRadius: BorderRadius.circular(12)
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: [
-                                    Expanded(
-                                      child: Stack(
-                                        fit: StackFit.expand,
+                            
+                            return MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: GestureDetector(
+                                onTap: () => _toggleSelection(file),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: BackdropFilter(
+                                    filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: isSelected ? Colors.cyan.withOpacity(0.15) : Colors.white.withOpacity(0.05),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: isSelected ? Colors.cyan.withOpacity(0.5) : Colors.white.withOpacity(0.1),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
                                         children: [
-                                          if (file.artwork != null)
-                                            Image.memory(file.artwork!, fit: BoxFit.cover)
-                                          else
-                                            Container(
-                                              decoration: BoxDecoration(
-                                                gradient: LinearGradient(
-                                                  begin: Alignment.topLeft,
-                                                  end: Alignment.bottomRight,
-                                                  colors: [Colors.grey[800]!, Colors.grey[900]!],
+                                          Expanded(
+                                            child: Stack(
+                                              fit: StackFit.expand,
+                                              children: [
+                                                if (file.artwork != null)
+                                                  Image.memory(file.artwork!, fit: BoxFit.cover)
+                                                else
+                                                  Container(
+                                                    decoration: BoxDecoration(
+                                                      gradient: LinearGradient(
+                                                        begin: Alignment.topLeft,
+                                                        end: Alignment.bottomRight,
+                                                        colors: [Colors.grey[800]!, Colors.grey[900]!],
+                                                      ),
+                                                    ),
+                                                    child: const Icon(Icons.music_note, size: 48, color: Colors.white10)
+                                                  ),
+                                                if (isSelected) const Positioned(top: 8, left: 8, child: Icon(Icons.check_circle, color: Colors.cyan, size: 22)),
+                                                Positioned(
+                                                  bottom: 8, right: 8,
+                                                  child: GestureDetector(
+                                                    onTap: () => _handlePlayback(file),
+                                                    child: Container(
+                                                      padding: const EdgeInsets.all(8), 
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.cyan, 
+                                                        shape: BoxShape.circle,
+                                                        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))]
+                                                      ), 
+                                                      child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.black, size: 20)
+                                                    ),
+                                                  ),
                                                 ),
-                                              ),
-                                              child: const Icon(Icons.music_note, size: 48, color: Colors.white10)
+                                              ],
                                             ),
-                                          if (isSelected) const Positioned(top: 8, left: 8, child: Icon(Icons.check_circle, color: Colors.cyan, size: 20)),
-                                          Positioned(
-                                            bottom: 8, right: 8,
-                                            child: GestureDetector(
-                                              onTap: () => _handlePlayback(file),
-                                              child: Container(
-                                                padding: const EdgeInsets.all(6), 
-                                                decoration: BoxDecoration(color: Colors.cyan, borderRadius: BorderRadius.circular(20)), 
-                                                child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.black, size: 20)
-                                              ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.all(10.0),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  file.title ?? file.name, 
+                                                  maxLines: 1, 
+                                                  overflow: TextOverflow.ellipsis, 
+                                                  style: TextStyle(
+                                                    fontSize: 12, 
+                                                    fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600, 
+                                                    color: isCurrent ? Colors.cyan : Colors.white.withOpacity(0.9)
+                                                  )
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  file.artist ?? 'Unknown Artist', 
+                                                  maxLines: 1, 
+                                                  overflow: TextOverflow.ellipsis, 
+                                                  style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.5))
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                    Padding(
-                                      padding: const EdgeInsets.all(8.0),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(file.title ?? file.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500, color: isCurrent ? Colors.cyan : Colors.white)),
-                                          Text(file.artist ?? 'Unknown Artist', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             );
@@ -744,7 +775,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                               height: 40,
                               decoration: BoxDecoration(
                                 color: Colors.grey[900],
-                                borderRadius: BorderRadius.circular(6),
+                                borderRadius: BorderRadius.circular(8),
                               ),
                               clipBehavior: Clip.antiAlias,
                               child: file.artwork != null 
