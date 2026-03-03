@@ -56,7 +56,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.26+27';
+  static const String appVersion = '1.0.27+28';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -243,6 +243,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           _totalFiles = initialFiles.length;
           _filesProcessed = 0;
           _isLoading = true;
+          _sourcePath = 'Web Session';
         });
         _processWebFiles(initialFiles);
       });
@@ -324,6 +325,13 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    String sourceInfo = _sourcePath ?? 'No directory loaded';
+    if (!kIsWeb && _sourcePath != null) {
+      sourceInfo = '${p.basename(_sourcePath!)} (${_allFiles.length} files)';
+    } else if (kIsWeb && _allFiles.isNotEmpty) {
+      sourceInfo = 'Web Session (${_allFiles.length} files)';
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -337,7 +345,14 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         actions: [
           IconButton(icon: const Icon(Icons.description), onPressed: _downloadLogs),
           const SizedBox(width: 8),
-          ElevatedButton.icon(onPressed: _pickSourceFiles, icon: const Icon(Icons.library_music), label: const Text('Load MP3s')),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              ElevatedButton.icon(onPressed: _pickSourceFiles, icon: const Icon(Icons.library_music), label: const Text('Load MP3s')),
+              Text(sourceInfo, style: const TextStyle(fontSize: 10, color: Colors.blueGrey)),
+            ],
+          ),
           if (!kIsWeb) ...[
             const SizedBox(width: 8),
             ElevatedButton.icon(onPressed: _pickDestinationDirectory, icon: const Icon(Icons.folder_open), label: Text(_destinationPath == null ? 'Set Dest' : 'Dest: ${p.basename(_destinationPath!)}')),
