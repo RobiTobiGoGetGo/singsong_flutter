@@ -51,11 +51,13 @@ class MP3File {
   final dynamic webFile; 
   final String? desktopPath;
   
-  // Metadata for Filtering & Display
+  // Metadata fields
   String? title;
   String? tit2;
+  String? tit3;
   String? artist;
   String? tpe1;
+  String? tpe2;
   String? author;
 
   MP3File({
@@ -67,18 +69,20 @@ class MP3File {
     this.url,
     this.title,
     this.tit2,
+    this.tit3,
     this.artist,
     this.tpe1,
+    this.tpe2,
     this.author,
   });
 
-  // Helper for UI display logic: Artist -> TPE1 -> Author -> fallback
+  // Display Logic: Priority for Artist Group
   String get displayArtist {
-    final performer = artist ?? tpe1 ?? author;
+    final performer = artist ?? tpe1 ?? tpe2 ?? author ?? tit3;
     return performer?.trim().isNotEmpty == true ? performer! : 'Unknown Artist';
   }
 
-  // Helper for UI display logic: Title -> TIT2 -> Filename
+  // Display Logic: Priority for Title Group
   String get displayTitle {
     final t = title ?? tit2;
     return t?.trim().isNotEmpty == true ? t! : name;
@@ -93,7 +97,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.42+43';
+  static const String appVersion = '1.0.43+44';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -200,13 +204,19 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       final id3 = MP3Instance(bytes);
       final meta = id3.getMetaTags();
       if (meta != null) {
-        // More robust key extraction
+        _log('--- DEBUG: RAW METADATA for ${mp3File.name} ---');
+        meta.forEach((key, value) => _log('  $key: $value'));
+
         mp3File.title = meta['Title']?.toString() ?? meta['title']?.toString();
         mp3File.tit2 = meta['TIT2']?.toString();
+        mp3File.tit3 = meta['TIT3']?.toString();
         mp3File.artist = meta['Artist']?.toString() ?? meta['artist']?.toString();
         mp3File.tpe1 = meta['TPE1']?.toString();
+        mp3File.tpe2 = meta['TPE2']?.toString();
         mp3File.author = meta['Author']?.toString() ?? meta['author']?.toString();
         
+        _log('Captured Fields: title=${mp3File.title}, tit2=${mp3File.tit2}, tit3=${mp3File.tit3}, artist=${mp3File.artist}, tpe1=${mp3File.tpe1}, tpe2=${mp3File.tpe2}, author=${mp3File.author}');
+
         dynamic apicData = meta['APIC'] ?? meta['PIC'];
         if (apicData != null) {
           if (apicData is Map && apicData.containsKey('base64')) {
@@ -217,6 +227,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             mp3File.artwork = Uint8List.fromList(apicData);
           }
         }
+      } else {
+        _log('DEBUG: No ID3 tags found for ${mp3File.name}');
       }
 
       if (mp3File.artwork == null) {
@@ -504,13 +516,19 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       final query = _filter.toLowerCase();
 
       final nameMatch = file.name.toLowerCase().contains(query);
+      
+      // Title Group: ['Title', 'TIT2']
       final titleMatch = file.title?.toLowerCase().contains(query) ?? false;
       final tit2Match = file.tit2?.toLowerCase().contains(query) ?? false;
-      final artistMatch = file.artist?.toLowerCase().contains(query) ?? false;
+      
+      // Artist/Author Group: ['TIT3', 'TPE1', 'TPE2', 'Artist', 'Author']
+      final tit3Match = file.tit3?.toLowerCase().contains(query) ?? false;
       final tpe1Match = file.tpe1?.toLowerCase().contains(query) ?? false;
+      final tpe2Match = file.tpe2?.toLowerCase().contains(query) ?? false;
+      final artistMatch = file.artist?.toLowerCase().contains(query) ?? false;
       final authorMatch = file.author?.toLowerCase().contains(query) ?? false;
       
-      return nameMatch || titleMatch || tit2Match || artistMatch || tpe1Match || authorMatch;
+      return nameMatch || titleMatch || tit2Match || tit3Match || tpe1Match || tpe2Match || artistMatch || authorMatch;
     }).toList();
 
     String sourceInfo = _sourcePath != null 
