@@ -34,8 +34,8 @@ class SingSongApp extends StatelessWidget {
           elevation: 0,
         ),
         textTheme: const TextTheme(
-          titleMedium: TextStyle(fontFamily: 'sans-serif', fontWeight: FontWeight.w600),
-          bodyMedium: TextStyle(fontFamily: 'sans-serif', fontWeight: FontWeight.w300),
+          titleMedium: TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.w600),
+          bodyMedium: TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.w300),
         ),
       ),
       home: const SingSongHomePage(),
@@ -50,8 +50,13 @@ class MP3File {
   String? url; 
   final dynamic webFile; 
   final String? desktopPath;
+  
+  // Metadata for Filtering & Display
   String? title;
+  String? tit2;
   String? artist;
+  String? tpe1;
+  String? author;
 
   MP3File({
     required this.name,
@@ -61,8 +66,23 @@ class MP3File {
     this.artwork,
     this.url,
     this.title,
+    this.tit2,
     this.artist,
+    this.tpe1,
+    this.author,
   });
+
+  // Helper for UI display logic: Artist -> TPE1 -> Author -> fallback
+  String get displayArtist {
+    final performer = artist ?? tpe1 ?? author;
+    return performer?.trim().isNotEmpty == true ? performer! : 'Unknown Artist';
+  }
+
+  // Helper for UI display logic: Title -> TIT2 -> Filename
+  String get displayTitle {
+    final t = title ?? tit2;
+    return t?.trim().isNotEmpty == true ? t! : name;
+  }
 }
 
 class SingSongHomePage extends StatefulWidget {
@@ -73,7 +93,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.40+41';
+  static const String appVersion = '1.0.42+43';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -180,8 +200,12 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       final id3 = MP3Instance(bytes);
       final meta = id3.getMetaTags();
       if (meta != null) {
-        mp3File.title = meta['Title']?.toString();
-        mp3File.artist = meta['Artist']?.toString();
+        // More robust key extraction
+        mp3File.title = meta['Title']?.toString() ?? meta['title']?.toString();
+        mp3File.tit2 = meta['TIT2']?.toString();
+        mp3File.artist = meta['Artist']?.toString() ?? meta['artist']?.toString();
+        mp3File.tpe1 = meta['TPE1']?.toString();
+        mp3File.author = meta['Author']?.toString() ?? meta['author']?.toString();
         
         dynamic apicData = meta['APIC'] ?? meta['PIC'];
         if (apicData != null) {
@@ -478,10 +502,15 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     final filteredFiles = _allFiles.where((file) {
       if (_filter.isEmpty) return true;
       final query = _filter.toLowerCase();
+
       final nameMatch = file.name.toLowerCase().contains(query);
       final titleMatch = file.title?.toLowerCase().contains(query) ?? false;
+      final tit2Match = file.tit2?.toLowerCase().contains(query) ?? false;
       final artistMatch = file.artist?.toLowerCase().contains(query) ?? false;
-      return nameMatch || titleMatch || artistMatch;
+      final tpe1Match = file.tpe1?.toLowerCase().contains(query) ?? false;
+      final authorMatch = file.author?.toLowerCase().contains(query) ?? false;
+      
+      return nameMatch || titleMatch || tit2Match || artistMatch || tpe1Match || authorMatch;
     }).toList();
 
     String sourceInfo = _sourcePath != null 
@@ -495,8 +524,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('SingSong', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan, fontSize: 18)),
-                Text('v$appVersion', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                const Text('SingSong', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan, fontSize: 18, fontFamily: 'Montserrat')),
+                Text('v$appVersion', style: const TextStyle(fontSize: 10, color: Colors.grey, fontFamily: 'Montserrat', fontWeight: FontWeight.w300)),
               ],
             ),
             const SizedBox(width: 24),
@@ -521,7 +550,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                           return TextField(
                             controller: controller,
                             focusNode: focusNode,
-                            style: const TextStyle(fontSize: 14),
+                            style: const TextStyle(fontSize: 14, fontFamily: 'Montserrat'),
                             decoration: InputDecoration(
                               hintText: 'Filter music...',
                               prefixIcon: const Icon(Icons.search, color: Colors.cyan, size: 20),
@@ -560,7 +589,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                   itemBuilder: (BuildContext context, int index) {
                                     final String option = options.elementAt(index);
                                     return ListTile(
-                                      title: Text(option, style: const TextStyle(fontSize: 13)),
+                                      title: Text(option, style: const TextStyle(fontSize: 13, fontFamily: 'Montserrat')),
                                       trailing: IconButton(
                                         icon: const Icon(Icons.close, size: 16, color: Colors.grey),
                                         onPressed: () async {
@@ -594,10 +623,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
               if (value == 'logs') _downloadLogs();
             },
             itemBuilder: (context) => [
-              const PopupMenuItem(value: 'load', child: ListTile(leading: Icon(Icons.library_music_outlined, size: 20), title: Text('Load MP3s', style: TextStyle(fontSize: 14)), dense: true)),
-              if (!kIsWeb) const PopupMenuItem(value: 'dest', child: ListTile(leading: Icon(Icons.folder_outlined, size: 20), title: Text('Set Destination', style: TextStyle(fontSize: 14)), dense: true)),
-              const PopupMenuItem(value: 'logs', child: ListTile(leading: Icon(Icons.description_outlined, size: 20), title: Text('Download Logs', style: TextStyle(fontSize: 14)), dense: true)),
-              PopupMenuItem(enabled: false, child: Text(sourceInfo, style: const TextStyle(fontSize: 11, color: Colors.grey))),
+              const PopupMenuItem(value: 'load', child: ListTile(leading: Icon(Icons.library_music_outlined, size: 20), title: Text('Load MP3s', style: TextStyle(fontSize: 14, fontFamily: 'Montserrat')), dense: true)),
+              if (!kIsWeb) const PopupMenuItem(value: 'dest', child: ListTile(leading: Icon(Icons.folder_outlined, size: 20), title: Text('Set Destination', style: TextStyle(fontSize: 14, fontFamily: 'Montserrat')), dense: true)),
+              const PopupMenuItem(value: 'logs', child: ListTile(leading: Icon(Icons.description_outlined, size: 20), title: Text('Download Logs', style: TextStyle(fontSize: 14, fontFamily: 'Montserrat')), dense: true)),
+              PopupMenuItem(enabled: false, child: Text(sourceInfo, style: const TextStyle(fontSize: 11, color: Colors.grey, fontFamily: 'Montserrat'))),
             ],
           ),
           const SizedBox(width: 8),
@@ -622,7 +651,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                       child: Container(
                         color: const Color(0xFF121212),
                         child: _allFiles.isEmpty && !_isLoading
-                          ? const Center(child: Text('Open the menu to load MP3s.', style: TextStyle(color: Colors.grey)))
+                          ? const Center(child: Text('Open the menu to load MP3s.', style: TextStyle(color: Colors.grey, fontFamily: 'Montserrat')))
                           : GridView.builder(
                               padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
                               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 180, childAspectRatio: 0.7, crossAxisSpacing: 12, mainAxisSpacing: 12),
@@ -695,7 +724,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                                   crossAxisAlignment: CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
-                                                      file.title ?? file.name, 
+                                                      file.displayTitle, 
                                                       maxLines: 1, 
                                                       overflow: TextOverflow.ellipsis, 
                                                       style: const TextStyle(
@@ -707,10 +736,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                                     ),
                                                     const SizedBox(height: 2),
                                                     Text(
-                                                      file.artist ?? 'Unknown Artist', 
+                                                      file.displayArtist, 
                                                       maxLines: 1, 
                                                       overflow: TextOverflow.ellipsis, 
-                                                      style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w300, fontFamily: 'Montserrat')
+                                                      style: const TextStyle(fontSize: 10, color: Colors.white54, fontWeight: FontWeight.w300, fontFamily: 'Montserrat')
                                                     ),
                                                   ],
                                                 ),
@@ -736,13 +765,13 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('Selected', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                                Text('(${_selectedFiles.length})', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                const Text('Selected', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, fontFamily: 'Montserrat')),
+                                Text('(${_selectedFiles.length})', style: const TextStyle(fontSize: 12, color: Colors.grey, fontFamily: 'Montserrat')),
                                 const Spacer(),
                                 ElevatedButton.icon(
                                   onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null, 
                                   icon: Icon(kIsWeb ? Icons.download : Icons.copy, size: 18), 
-                                  label: Text(kIsWeb ? 'Download' : 'Copy Now'), 
+                                  label: Text(kIsWeb ? 'Download' : 'Copy Now', style: const TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.w600)), 
                                   style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black, elevation: 0)
                                 ),
                               ],
@@ -764,8 +793,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                       ? Image.memory(file.artwork!, fit: BoxFit.cover)
                                       : const Icon(Icons.music_note, size: 20, color: Colors.white10),
                                 ),
-                                title: Text(file.title ?? file.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Montserrat'), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                subtitle: Text(file.artist ?? 'Unknown Artist', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w300, fontFamily: 'Montserrat', color: Colors.grey)),
+                                title: Text(file.displayTitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Montserrat'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                subtitle: Text(file.displayArtist, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w300, fontFamily: 'Montserrat', color: Colors.grey)),
                                 trailing: IconButton(icon: const Icon(Icons.close, size: 16, color: Colors.grey), onPressed: () => _toggleSelection(file)),
                               )).toList(),
                             ),
@@ -843,7 +872,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(_currentFile?.title ?? _currentFile?.name ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white, fontFamily: 'Montserrat'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(_currentFile?.displayTitle ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white, fontFamily: 'Montserrat'), maxLines: 1, overflow: TextOverflow.ellipsis),
                           Text('${_formatDuration(_position)} / ${_formatDuration(_duration)}', style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w300, fontFamily: 'Montserrat')),
                         ],
                       ),
