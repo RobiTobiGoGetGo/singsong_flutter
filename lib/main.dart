@@ -51,13 +51,15 @@ class MP3File {
   final dynamic webFile; 
   final String? desktopPath;
   
-  // Metadata fields
+  // Group "Title": ['Title', 'TIT2']
   String? title;
   String? tit2;
+  
+  // Group "Artist/Author": ['TIT3', 'TPE1', 'TPE2', 'Artist', 'Author']
   String? tit3;
-  String? artist;
   String? tpe1;
   String? tpe2;
+  String? artist;
   String? author;
 
   MP3File({
@@ -76,13 +78,13 @@ class MP3File {
     this.author,
   });
 
-  // Display Logic: Priority for Artist Group
+  // Display Logic: Artist Group
   String get displayArtist {
     final performer = artist ?? tpe1 ?? tpe2 ?? author ?? tit3;
     return performer?.trim().isNotEmpty == true ? performer! : 'Unknown Artist';
   }
 
-  // Display Logic: Priority for Title Group
+  // Display Logic: Title Group
   String get displayTitle {
     final t = title ?? tit2;
     return t?.trim().isNotEmpty == true ? t! : name;
@@ -97,7 +99,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.43+44';
+  static const String appVersion = '1.0.44+45';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -202,20 +204,27 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   void _extractMetadata(MP3File mp3File, Uint8List bytes) {
     try {
       final id3 = MP3Instance(bytes);
+      id3.parseTagsSync();
       final meta = id3.getMetaTags();
       if (meta != null) {
         _log('--- DEBUG: RAW METADATA for ${mp3File.name} ---');
-        meta.forEach((key, value) => _log('  $key: $value'));
+        meta.forEach((key, value) {
+          if (key != 'APIC' && key != 'PIC') {
+            _log('  $key: $value');
+          }
+        });
 
+        // Mapping logic based on Groups
         mp3File.title = meta['Title']?.toString() ?? meta['title']?.toString();
         mp3File.tit2 = meta['TIT2']?.toString();
+        
         mp3File.tit3 = meta['TIT3']?.toString();
-        mp3File.artist = meta['Artist']?.toString() ?? meta['artist']?.toString();
         mp3File.tpe1 = meta['TPE1']?.toString();
         mp3File.tpe2 = meta['TPE2']?.toString();
+        mp3File.artist = meta['Artist']?.toString() ?? meta['artist']?.toString();
         mp3File.author = meta['Author']?.toString() ?? meta['author']?.toString();
         
-        _log('Captured Fields: title=${mp3File.title}, tit2=${mp3File.tit2}, tit3=${mp3File.tit3}, artist=${mp3File.artist}, tpe1=${mp3File.tpe1}, tpe2=${mp3File.tpe2}, author=${mp3File.author}');
+        _log('Captured: Title Group [title=${mp3File.title}, tit2=${mp3File.tit2}], Artist Group [artist=${mp3File.artist}, tpe1=${mp3File.tpe1}, tpe2=${mp3File.tpe2}, author=${mp3File.author}, tit3=${mp3File.tit3}]');
 
         dynamic apicData = meta['APIC'] ?? meta['PIC'];
         if (apicData != null) {
@@ -228,7 +237,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           }
         }
       } else {
-        _log('DEBUG: No ID3 tags found for ${mp3File.name}');
+        _log('DEBUG: No metadata found for ${mp3File.name}');
       }
 
       if (mp3File.artwork == null) {
