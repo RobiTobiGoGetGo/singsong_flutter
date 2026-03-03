@@ -56,7 +56,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.25+26';
+  static const String appVersion = '1.0.26+27';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -133,7 +133,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   Uint8List? _extractArtwork(Uint8List bytes, String fileName) {
     try {
-      // 1. Standard Metadata Parse
       final id3 = MP3Instance(bytes);
       final meta = id3.getMetaTags();
       if (meta != null) {
@@ -145,7 +144,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         }
       }
 
-      // 2. Binary Scan Recovery (Searches for actual image headers)
       for (int i = 0; i < bytes.length - 10; i++) {
         if (bytes[i] == 0xFF && bytes[i+1] == 0xD8 && bytes[i+2] == 0xFF) {
           int end = (i + 500000 > bytes.length) ? bytes.length : i + 500000;
@@ -157,7 +155,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           _log('[$fileName] Recovered PNG artwork via binary scan.');
           return bytes.sublist(i, end);
         }
-        if (i > 1000000) break; // Scan first 1MB only
+        if (i > 1000000) break;
       }
       return null;
     } catch (e) {
@@ -202,7 +200,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         final file = File(mp3File.desktopPath!);
         final bytes = await file.readAsBytes();
         mp3File.artwork = _extractArtwork(bytes, mp3File.name);
-      } catch (e) { _log('Meta error for ${mp3File.name}: $e'); }
+      } catch (e) {
+        _log('Meta error for ${mp3File.name}: $e');
+      }
 
       if (i % 5 == 0 || i == files.length - 1) {
         if (mounted) setState(() { _filesProcessed = i + 1; });
@@ -438,6 +438,18 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                       Expanded(
                         child: ListView(
                           children: _selectedFiles.map((file) => ListTile(
+                            leading: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[300],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: file.artwork != null 
+                                  ? Image.memory(file.artwork!, fit: BoxFit.cover)
+                                  : const Icon(Icons.music_note, size: 24, color: Colors.grey),
+                            ),
                             title: Text(file.name, style: const TextStyle(fontSize: 11)),
                             trailing: IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => _toggleSelection(file)),
                           )).toList(),
