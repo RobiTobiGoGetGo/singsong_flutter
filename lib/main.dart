@@ -60,7 +60,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.32+33';
+  static const String appVersion = '1.0.33+34';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -78,6 +78,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   String _filter = '';
   final TextEditingController _filterController = TextEditingController();
+  List<String> _filterHistory = [];
 
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
@@ -154,6 +155,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       setState(() { 
         _sourcePath = prefs.getString('sourcePath');
         _destinationPath = prefs.getString('destinationPath'); 
+        _filterHistory = prefs.getStringList('filterHistory') ?? [];
       });
     } catch (e) { _log('Error loading paths: $e'); }
   }
@@ -440,6 +442,20 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     return "$twoDigitMinutes:$twoDigitSeconds";
   }
 
+  void _onFilterSubmitted(String value) async {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return;
+    
+    if (!_filterHistory.contains(trimmed)) {
+      setState(() {
+        _filterHistory.insert(0, trimmed);
+        if (_filterHistory.length > 10) _filterHistory.removeLast();
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('filterHistory', _filterHistory);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final filteredFiles = _allFiles.where((file) {
@@ -505,21 +521,77 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: TextField(
-              controller: _filterController,
-              decoration: InputDecoration(
-                hintText: 'Filter by name, title, or performer...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _filter.isNotEmpty 
-                  ? IconButton(icon: const Icon(Icons.clear), onPressed: () {
-                      _filterController.clear();
-                      setState(() { _filter = ''; });
-                    })
-                  : null,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-              ),
-              onChanged: (value) => setState(() { _filter = value; }),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return RawAutocomplete<String>(
+                  textEditingController: _filterController,
+                  focusNode: FocusNode(),
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return _filterHistory;
+                    }
+                    return _filterHistory.where((String option) {
+                      return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                    });
+                  },
+                  onSelected: (String selection) {
+                    setState(() { _filter = selection; });
+                  },
+                  fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                    return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      decoration: InputDecoration(
+                        hintText: 'Filter by name, title, or performer...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_filter.isNotEmpty) 
+                              IconButton(icon: const Icon(Icons.clear), onPressed: () {
+                                controller.clear();
+                                setState(() { _filter = ''; });
+                              }),
+                            const Icon(Icons.arrow_drop_down),
+                            const SizedBox(width: 8),
+                          ],
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                      ),
+                      onChanged: (value) => setState(() { _filter = value; }),
+                      onSubmitted: (value) {
+                        _onFilterSubmitted(value);
+                        onFieldSubmitted();
+                      },
+                    );
+                  },
+                  optionsViewBuilder: (context, onSelected, options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4.0,
+                        child: Container(
+                          width: constraints.maxWidth,
+                          constraints: const BoxConstraints(maxHeight: 200),
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: true,
+                            itemCount: options.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              final String option = options.elementAt(index);
+                              return ListTile(
+                                title: Text(option),
+                                onTap: () => onSelected(option),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }
             ),
           ),
           Expanded(
