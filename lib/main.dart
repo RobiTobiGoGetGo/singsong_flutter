@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart' show kIsWeb, Uint8List;
 import 'package:id3/id3.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show rootBundle, Clipboard, ClipboardData;
 import 'dart:io';
 import 'dart:convert';
 import 'dart:ui';
@@ -110,7 +110,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.50+51';
+  static const String appVersion = '1.0.52+53';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -651,6 +651,35 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     });
   }
 
+  void _showFileContextMenu(BuildContext context, Offset position, MP3File file) {
+    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    showMenu(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(position.dx, position.dy, 0, 0),
+        Rect.fromLTWH(0, 0, overlay.size.width, overlay.size.height),
+      ),
+      elevation: 8,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: const Color(0xFF2A2A2A),
+      items: [
+        PopupMenuItem(
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: file.name));
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Copied: ${file.name}'), duration: const Duration(seconds: 1)));
+          },
+          child: Row(
+            children: [
+              const Icon(Icons.copy, color: Colors.cyan, size: 20),
+              const SizedBox(width: 12),
+              const Text('Copy File Name', style: TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'Montserrat')),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final double scale = _isEasyMode ? 1.4 : 1.0;
@@ -683,22 +712,23 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        toolbarHeight: 100 * scale,
-        title: Column(
+        toolbarHeight: 64 * scale,
+        title: Row(
           children: [
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('SingSong', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan, fontSize: 18 * scale, fontFamily: 'Montserrat')),
-                    if (!_isEasyMode) Text('v$appVersion', style: const TextStyle(fontSize: 10, color: Colors.grey, fontFamily: 'Montserrat', fontWeight: FontWeight.w300)),
-                  ],
-                ),
-                const SizedBox(width: 24),
-                Expanded(
-                  child: Center(
+                Text('SingSong', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan, fontSize: 18 * scale, fontFamily: 'Montserrat')),
+                if (!_isEasyMode) Text('v$appVersion', style: const TextStyle(fontSize: 10, color: Colors.grey, fontFamily: 'Montserrat', fontWeight: FontWeight.w300)),
+              ],
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
                     child: ConstrainedBox(
                       constraints: BoxConstraints(maxWidth: 500 * scale),
                       child: LayoutBuilder(
@@ -779,16 +809,17 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildArtworkRadio('All', ArtworkFilter.all, scale),
-                _buildArtworkRadio('Has artwork', ArtworkFilter.hasArtwork, scale),
-                _buildArtworkRadio('Artwork missing', ArtworkFilter.missingArtwork, scale),
-              ],
+                  const SizedBox(width: 16),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildArtworkRadio('All', ArtworkFilter.all, scale),
+                      _buildArtworkRadio('Has artwork', ArtworkFilter.hasArtwork, scale),
+                      _buildArtworkRadio('Artwork missing', ArtworkFilter.missingArtwork, scale),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -849,6 +880,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                   cursor: SystemMouseCursors.click,
                                   child: GestureDetector(
                                     onTap: () => _toggleSelection(file),
+                                    onSecondaryTapDown: (details) => _showFileContextMenu(context, details.globalPosition, file),
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(16 * scale),
                                       child: BackdropFilter(
@@ -971,34 +1003,41 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                           Expanded(
                             child: ListView(
                               padding: EdgeInsets.only(bottom: 120 * scale),
-                              children: _selectedFiles.map((file) => ListTile(
-                                onTap: () => _play(file, playlistMode: true),
-                                hoverColor: Colors.white10,
-                                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4 * scale),
-                                leading: Container(
-                                  width: 40 * scale,
-                                  height: 40 * scale,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[900],
-                                    borderRadius: BorderRadius.circular(8 * scale),
+                              children: _selectedFiles.map((file) => Listener(
+                                onPointerDown: (event) {
+                                  if (event.kind == PointerDeviceKind.mouse && event.buttons == 2) {
+                                    _showFileContextMenu(context, event.position, file);
+                                  }
+                                },
+                                child: ListTile(
+                                  onTap: () => _play(file, playlistMode: true),
+                                  hoverColor: Colors.white10,
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4 * scale),
+                                  leading: Container(
+                                    width: 40 * scale,
+                                    height: 40 * scale,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[900],
+                                      borderRadius: BorderRadius.circular(8 * scale),
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: file.artwork != null 
+                                        ? Image.memory(file.artwork!, fit: BoxFit.cover)
+                                        : Icon(Icons.music_note, size: 20 * scale, color: Colors.white10),
                                   ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: file.artwork != null 
-                                      ? Image.memory(file.artwork!, fit: BoxFit.cover)
-                                      : Icon(Icons.music_note, size: 20 * scale, color: Colors.white10),
+                                  title: Text(file.displayTitle, 
+                                    style: TextStyle(
+                                      fontSize: 12 * scale, 
+                                      fontWeight: FontWeight.w600, 
+                                      fontFamily: 'Montserrat',
+                                      color: _currentFile == file ? Colors.cyan : Colors.white,
+                                    ), 
+                                    maxLines: 1, 
+                                    overflow: TextOverflow.ellipsis
+                                  ),
+                                  subtitle: Text(file.displayArtist, style: TextStyle(fontSize: 10 * scale, fontWeight: FontWeight.w300, fontFamily: 'Montserrat', color: Colors.grey)),
+                                  trailing: IconButton(icon: Icon(Icons.close, size: 16 * scale, color: Colors.grey), onPressed: () => _toggleSelection(file)),
                                 ),
-                                title: Text(file.displayTitle, 
-                                  style: TextStyle(
-                                    fontSize: 12 * scale, 
-                                    fontWeight: FontWeight.w600, 
-                                    fontFamily: 'Montserrat',
-                                    color: _currentFile == file ? Colors.cyan : Colors.white,
-                                  ), 
-                                  maxLines: 1, 
-                                  overflow: TextOverflow.ellipsis
-                                ),
-                                subtitle: Text(file.displayArtist, style: TextStyle(fontSize: 10 * scale, fontWeight: FontWeight.w300, fontFamily: 'Montserrat', color: Colors.grey)),
-                                trailing: IconButton(icon: Icon(Icons.close, size: 16 * scale, color: Colors.grey), onPressed: () => _toggleSelection(file)),
                               )).toList(),
                             ),
                           ),
