@@ -108,7 +108,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.55+56';
+  static const String appVersion = '1.0.56+57';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -697,8 +697,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           return CallbackShortcuts(
             bindings: {
               const SingleActivator(LogicalKeyboardKey.keyV, control: true): () async {
-                // Clipboard image pasting is restricted in many environments.
-                // Choosing a file is the primary method.
+                // Image paste handled via button due to system permission complexity
               },
             },
             child: AlertDialog(
@@ -721,34 +720,20 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                         : const Icon(Icons.image_search, color: Colors.white10, size: 64),
                   ),
                   const SizedBox(height: 16),
-                  Text(newArtwork == null ? 'Choose an image or try Paste button' : 'New artwork ready!', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  const Text('Choose a new image for this song.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: () async {
-                          FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
-                          if (result != null && result.files.first.bytes != null) {
-                            setDialogState(() { newArtwork = result.files.first.bytes; });
-                          } else if (result != null && result.files.first.path != null) {
-                            setDialogState(() { newArtwork = File(result.files.first.path!).readAsBytesSync(); });
-                          }
-                        },
-                        icon: const Icon(Icons.file_upload, size: 18),
-                        label: const Text('Choose'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed: () async {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Image paste requires additional system permissions.')));
-                        },
-                        icon: const Icon(Icons.paste, size: 18),
-                        label: const Text('Paste'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[800], foregroundColor: Colors.white),
-                      ),
-                    ],
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
+                      if (result != null && result.files.first.bytes != null) {
+                        setDialogState(() { newArtwork = result.files.first.bytes; });
+                      } else if (result != null && result.files.first.path != null) {
+                        setDialogState(() { newArtwork = File(result.files.first.path!).readAsBytesSync(); });
+                      }
+                    },
+                    icon: const Icon(Icons.file_upload, size: 18),
+                    label: const Text('Choose Image'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black),
                   ),
                 ],
               ),
@@ -759,8 +744,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                     bool? confirm = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
-                        title: const Text('Update File?'),
-                        content: const Text('This will update the MP3 file permanently. Continue?'),
+                        title: const Text('Update Artwork?'),
+                        content: const Text('This will update the song display. Continue?'),
                         actions: [
                           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
                           TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Yes')),
@@ -769,11 +754,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                     );
                     if (confirm == true) {
                       setState(() { file.artwork = newArtwork; });
-                      if (!kIsWeb && file.desktopPath != null) {
-                        try {
-                          _log('Artwork updated for ${file.name}. (Cache updated)');
-                        } catch (e) { _log('Update failed: $e'); }
-                      }
                       _saveLibraryCache();
                       Navigator.pop(context);
                     }
