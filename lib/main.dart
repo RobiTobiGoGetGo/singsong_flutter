@@ -48,8 +48,8 @@ class MP3File {
   final int size;
   Uint8List? artwork;
   String? url; 
-  final dynamic webFile; 
-  final String? desktopPath;
+  dynamic webFile; 
+  String? desktopPath;
   
   String? title;
   String? artist;
@@ -94,6 +94,9 @@ class MP3File {
   String get displayTitle {
     return title?.trim().isNotEmpty == true ? title! : name;
   }
+
+  // Identity helper for matching cached files
+  String get identity => '$name-$size';
 }
 
 class SingSongHomePage extends StatefulWidget {
@@ -104,7 +107,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.47+48';
+  static const String appVersion = '1.0.48+49';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -135,13 +138,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   void initState() {
     super.initState();
     _log('App started v$appVersion');
-    _loadStoredPaths().then((_) {
-      if (!kIsWeb && _sourcePath != null) {
-        _autoLoadFiles(_sourcePath!);
-      } else if (kIsWeb) {
-        _loadWebCache();
-      }
-    });
+    _initializeLibrary();
     
     _audioPlayer.onPlayerStateChanged.listen((state) {
       if (mounted) setState(() { _playerState = state; });
@@ -166,6 +163,17 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     });
   }
 
+  Future<void> _initializeLibrary() async {
+    await _loadStoredPaths();
+    await _loadLibraryCache();
+    
+    if (!kIsWeb && _sourcePath != null) {
+      _autoRefreshDesktopFiles(_sourcePath!);
+    } else if (kIsWeb && _allFiles.isNotEmpty) {
+      _log('Web library restored from cache. Grant access to play.');
+    }
+  }
+
   @override
   void dispose() {
     _cleanupWebUrls();
@@ -180,6 +188,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       for (var file in _allFiles) {
         if (file.url != null) {
           try { html.Url.revokeObjectUrl(file.url!); } catch (_) {}
+          file.url = null;
         }
       }
     }
@@ -215,29 +224,35 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     } catch (e) { _log('Error loading paths: $e'); }
   }
 
-  Future<void> _loadWebCache() async {
+  Future<void> _loadLibraryCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cached = prefs.getString('webCache');
+      final cached = prefs.getString('libraryCache');
       if (cached != null) {
         final List<dynamic> decoded = jsonDecode(cached);
         setState(() {
           _allFiles = decoded.map((item) => MP3File.fromJson(item)).toList();
-          _sourcePath = 'Web Cache (Grant access to play)';
+          if (kIsWeb && _allFiles.isNotEmpty) {
+            _sourcePath = 'Cached Library (Grant access to play)';
+          }
         });
-        _log('Loaded ${_allFiles.length} files from web cache.');
+        _log('Loaded ${_allFiles.length} files from library cache.');
       }
-    } catch (e) { _log('Error loading web cache: $e'); }
+    } catch (e) { _log('Error loading library cache: $e'); }
   }
 
-  Future<void> _saveWebCache() async {
-    if (!kIsWeb) return;
+  Future<void> _saveLibraryCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final json = jsonEncode(_allFiles.map((f) => f.toJson()).toList());
-      await prefs.setString('webCache', json);
-      _log('Saved ${_allFiles.length} files to web cache.');
-    } catch (e) { _log('Error saving web cache: $e'); }
+      await prefs.setString('libraryCache', json);
+      _log('Saved ${_allFiles.length} files to library cache.');
+    } catch (e) { 
+      _log('Error saving library cache: $e'); 
+      if (kIsWeb && e.toString().contains('QuotaExceededError')) {
+        _log('WARNING: Library cache too large for LocalStorage.');
+      }
+    }
   }
 
   void _extractMetadata(MP3File mp3File, Uint8List bytes) {
@@ -246,18 +261,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       id3.parseTagsSync();
       final meta = id3.getMetaTags();
       if (meta != null) {
-        _log('--- DEBUG: RAW METADATA for ${mp3File.name} ---');
-        meta.forEach((key, value) {
-          if (key != 'APIC' && key != 'PIC') {
-            _log('  $key: $value');
-          }
-        });
-
         mp3File.title = meta['Title']?.toString() ?? meta['title']?.toString();
         mp3File.artist = meta['Artist']?.toString() ?? meta['artist']?.toString();
         
-        _log('Captured: Title=${mp3File.title}, Artist=${mp3File.artist}');
-
         dynamic apicData = meta['APIC'] ?? meta['PIC'];
         if (apicData != null) {
           if (apicData is Map && apicData.containsKey('base64')) {
@@ -268,8 +274,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             mp3File.artwork = Uint8List.fromList(apicData);
           }
         }
-      } else {
-        _log('DEBUG: No metadata found for ${mp3File.name}');
       }
 
       if (mp3File.artwork == null) {
@@ -290,34 +294,49 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     } catch (e) { _log('Metadata extraction error: $e'); }
   }
 
-  Future<void> _autoLoadFiles(String path) async {
-    _log('Auto-loading files from: $path');
+  Future<void> _autoRefreshDesktopFiles(String path) async {
+    _log('Refreshing desktop library from: $path');
     try {
       final dir = Directory(path);
       if (!await dir.exists()) return;
 
       final entities = await dir.list().toList();
-      List<MP3File> loadedFiles = [];
+      Map<String, MP3File> cachedMap = { for (var f in _allFiles) f.identity : f };
+      List<MP3File> updatedList = [];
+      List<MP3File> filesToProcess = [];
+
       for (var entity in entities) {
         if (entity is File && entity.path.toLowerCase().endsWith('.mp3')) {
-          loadedFiles.add(MP3File(
-            name: p.basename(entity.path),
-            size: await entity.length(),
-            desktopPath: entity.path,
-          ));
+          final stat = await entity.stat();
+          final identity = '${p.basename(entity.path)}-${stat.size}';
+          
+          if (cachedMap.containsKey(identity)) {
+            final cachedFile = cachedMap[identity]!;
+            cachedFile.desktopPath = entity.path; // Update path in case it changed
+            updatedList.add(cachedFile);
+          } else {
+            final newFile = MP3File(
+              name: p.basename(entity.path), 
+              size: stat.size, 
+              desktopPath: entity.path
+            );
+            updatedList.add(newFile);
+            filesToProcess.add(newFile);
+          }
         }
       }
 
       _currentLoadId++;
       setState(() {
-        _allFiles = loadedFiles;
-        _totalFiles = loadedFiles.length;
-        _filesProcessed = 0;
-        _isLoading = true;
+        _allFiles = updatedList;
+        if (filesToProcess.isNotEmpty) {
+          _totalFiles = filesToProcess.length;
+          _filesProcessed = 0;
+          _isLoading = true;
+          _processDesktopFiles(filesToProcess, _currentLoadId);
+        }
       });
-
-      _processDesktopFiles(loadedFiles, _currentLoadId);
-    } catch (e) { _log('Auto-load failed: $e'); }
+    } catch (e) { _log('Auto-refresh failed: $e'); }
   }
 
   Future<void> _processDesktopFiles(List<MP3File> files, int loadId) async {
@@ -335,7 +354,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         await Future.delayed(const Duration(milliseconds: 1));
       }
     }
-    if (mounted && loadId == _currentLoadId) setState(() { _isLoading = false; });
+    if (mounted && loadId == _currentLoadId) {
+      setState(() { _isLoading = false; });
+      _saveLibraryCache();
+    }
   }
 
   Future<void> _pickDestinationDirectory() async {
@@ -356,7 +378,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Loading in Progress'),
-          content: const Text('The current loading process will be terminated and all file lists will be emptied. Do you want to continue?'),
+          content: const Text('The current loading process will be terminated. Do you want to continue?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -365,53 +387,60 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-              child: const Text('Reset load MP3'),
+              child: const Text('Reset and Load New'),
             ),
           ],
         ),
       );
-
       if (reset != true) return;
-      
       _currentLoadId++;
-      _cleanupWebUrls();
-      setState(() {
-        _allFiles = [];
-        _selectedFiles.clear();
-        _filesProcessed = 0;
-        _totalFiles = 0;
-        _isLoading = false;
-        _sourcePath = null;
-      });
     }
     _pickSourceFiles();
   }
 
   Future<void> _pickSourceFiles() async {
     if (kIsWeb) {
-      final input = html.FileUploadInputElement()
-        ..multiple = true
-        ..accept = '.mp3';
+      final input = html.FileUploadInputElement()..multiple = true..accept = '.mp3';
       input.click();
       input.onChange.listen((event) async {
         final files = input.files;
         if (files == null || files.isEmpty) return;
+        
         _cleanupWebUrls();
-        List<MP3File> initialFiles = [];
+        Map<String, MP3File> cachedMap = { for (var f in _allFiles) f.identity : f };
+        List<MP3File> updatedLibrary = [];
+        List<MP3File> filesToProcess = [];
+
         for (var file in files) {
           if (file.name.toLowerCase().endsWith('.mp3')) {
-            initialFiles.add(MP3File(name: file.name, size: file.size, webFile: file));
+            final identity = '${file.name}-${file.size}';
+            if (cachedMap.containsKey(identity)) {
+              final cached = cachedMap[identity]!;
+              cached.webFile = file;
+              updatedLibrary.add(cached);
+            } else {
+              final newFile = MP3File(name: file.name, size: file.size, webFile: file);
+              updatedLibrary.add(newFile);
+              filesToProcess.add(newFile);
+            }
           }
         }
+
         _currentLoadId++;
         setState(() {
-          _allFiles = initialFiles;
-          _totalFiles = initialFiles.length;
-          _filesProcessed = 0;
-          _isLoading = true;
+          _allFiles = updatedLibrary;
           _sourcePath = 'Selected Files';
+          if (filesToProcess.isNotEmpty) {
+            _totalFiles = filesToProcess.length;
+            _filesProcessed = 0;
+            _isLoading = true;
+            _processWebFiles(filesToProcess, _currentLoadId);
+          } else {
+            _isLoading = false;
+            _log('Restored all selected files from cache.');
+            _refreshWebUrls();
+          }
         });
-        _processWebFiles(initialFiles, _currentLoadId);
       });
     } else {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -429,22 +458,28 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         await prefs.setString('sourcePath', folderPath);
       }
       
-      List<MP3File> initialFiles = result.files.map((f) => MP3File(
-        name: f.name,
-        size: f.size,
-        desktopPath: f.path,
-      )).toList();
-      
-      _currentLoadId++;
-      setState(() {
-        _allFiles = initialFiles;
-        _totalFiles = initialFiles.length;
-        _filesProcessed = 0;
-        _isLoading = true;
-        _sourcePath = folderPath;
-      });
-      _processDesktopFiles(initialFiles, _currentLoadId);
+      setState(() { _sourcePath = folderPath; });
+      if (folderPath != null) {
+        _autoRefreshDesktopFiles(folderPath);
+      }
     }
+  }
+
+  Future<void> _refreshWebUrls() async {
+    if (!kIsWeb) return;
+    for (var file in _allFiles) {
+      if (file.webFile != null && file.url == null) {
+        try {
+          final reader = html.FileReader();
+          reader.readAsArrayBuffer(file.webFile);
+          await reader.onLoadEnd.first;
+          final Uint8List bytes = reader.result as Uint8List;
+          final blob = html.Blob([bytes]);
+          file.url = html.Url.createObjectUrlFromBlob(blob);
+        } catch (_) {}
+      }
+    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _processWebFiles(List<MP3File> files, int loadId) async {
@@ -467,7 +502,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     }
     if (mounted && loadId == _currentLoadId) {
       setState(() { _isLoading = false; });
-      _saveWebCache();
+      _saveLibraryCache();
     }
   }
 
@@ -487,7 +522,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   Future<void> _play(MP3File file, {bool playlistMode = false}) async {
     if (kIsWeb && file.webFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please reload files to grant playback access.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please re-select files to grant playback access.')));
       return;
     }
     _log('Playing: ${file.name} (Playlist: $playlistMode)');
@@ -514,10 +549,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       _stopPlayback();
       return;
     }
-
     final selectedList = _selectedFiles.toList();
     final currentIndex = selectedList.indexOf(_currentFile!);
-    
     if (currentIndex != -1 && currentIndex < selectedList.length - 1) {
       _play(selectedList[currentIndex + 1], playlistMode: true);
     } else {
@@ -527,10 +560,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   void _playPrevious() {
     if (_selectedFiles.isEmpty || _currentFile == null) return;
-
     final selectedList = _selectedFiles.toList();
     final currentIndex = selectedList.indexOf(_currentFile!);
-    
     if (currentIndex > 0) {
       _play(selectedList[currentIndex - 1], playlistMode: true);
     }
@@ -557,6 +588,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     if (_selectedFiles.isEmpty) return;
     if (kIsWeb) {
       for (var file in _selectedFiles) {
+        if (file.webFile == null) continue;
         final reader = html.FileReader();
         reader.readAsArrayBuffer(file.webFile);
         reader.onLoadEnd.listen((event) {
@@ -585,7 +617,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   void _onFilterSubmitted(String value) async {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return;
-    
     setState(() {
       _filterHistory.remove(trimmed);
       _filterHistory.insert(0, trimmed);
@@ -606,21 +637,15 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   @override
   Widget build(BuildContext context) {
     final double scale = _isEasyMode ? 1.4 : 1.0;
-    
     final filteredFiles = _allFiles.where((file) {
       if (_filter.isEmpty) return true;
       final query = _filter.toLowerCase();
-
-      final nameMatch = file.name.toLowerCase().contains(query);
-      final titleMatch = file.title?.toLowerCase().contains(query) ?? false;
-      final artistMatch = file.artist?.toLowerCase().contains(query) ?? false;
-      
-      return nameMatch || titleMatch || artistMatch;
+      return file.name.toLowerCase().contains(query) || 
+             (file.title?.toLowerCase().contains(query) ?? false) || 
+             (file.artist?.toLowerCase().contains(query) ?? false);
     }).toList();
 
-    String sourceInfo = _sourcePath != null 
-        ? '${kIsWeb ? _sourcePath : p.basename(_sourcePath!)} (${_allFiles.length} files)'
-        : 'No files loaded';
+    String sourceInfo = _sourcePath ?? 'No library loaded';
 
     return Scaffold(
       appBar: AppBar(
