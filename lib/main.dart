@@ -65,6 +65,26 @@ class MP3File {
     this.artist,
   });
 
+  // Convert to JSON for persistence
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'size': size,
+    'title': title,
+    'artist': artist,
+    'desktopPath': desktopPath,
+    'artwork': artwork != null ? base64Encode(artwork!) : null,
+  };
+
+  // Create from JSON
+  factory MP3File.fromJson(Map<String, dynamic> json) => MP3File(
+    name: json['name'],
+    size: json['size'],
+    title: json['title'],
+    artist: json['artist'],
+    desktopPath: json['desktopPath'],
+    artwork: json['artwork'] != null ? base64Decode(json['artwork']) : null,
+  );
+
   // Display Logic: Artist Group
   String get displayArtist {
     return artist?.trim().isNotEmpty == true ? artist! : 'Unknown Artist';
@@ -84,7 +104,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.45+46';
+  static const String appVersion = '1.0.46+47';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -99,6 +119,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   int _filesProcessed = 0;
   int _totalFiles = 0;
   int _currentLoadId = 0;
+
+  bool _isEasyMode = false;
 
   String _filter = '';
   final TextEditingController _filterController = TextEditingController();
@@ -115,6 +137,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     _loadStoredPaths().then((_) {
       if (!kIsWeb && _sourcePath != null) {
         _autoLoadFiles(_sourcePath!);
+      } else if (kIsWeb) {
+        _loadWebCache();
       }
     });
     
@@ -182,8 +206,34 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         _sourcePath = prefs.getString('sourcePath');
         _destinationPath = prefs.getString('destinationPath'); 
         _filterHistory = prefs.getStringList('filterHistory') ?? [];
+        _isEasyMode = prefs.getBool('easyMode') ?? false;
       });
     } catch (e) { _log('Error loading paths: $e'); }
+  }
+
+  Future<void> _loadWebCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString('webCache');
+      if (cached != null) {
+        final List<dynamic> decoded = jsonDecode(cached);
+        setState(() {
+          _allFiles = decoded.map((item) => MP3File.fromJson(item)).toList();
+          _sourcePath = 'Web Cache (Grant access to play)';
+        });
+        _log('Loaded ${_allFiles.length} files from web cache.');
+      }
+    } catch (e) { _log('Error loading web cache: $e'); }
+  }
+
+  Future<void> _saveWebCache() async {
+    if (!kIsWeb) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = jsonEncode(_allFiles.map((f) => f.toJson()).toList());
+      await prefs.setString('webCache', json);
+      _log('Saved ${_allFiles.length} files to web cache.');
+    } catch (e) { _log('Error saving web cache: $e'); }
   }
 
   void _extractMetadata(MP3File mp3File, Uint8List bytes) {
@@ -411,7 +461,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         await Future.delayed(const Duration(milliseconds: 1));
       }
     }
-    if (mounted && loadId == _currentLoadId) setState(() { _isLoading = false; });
+    if (mounted && loadId == _currentLoadId) {
+      setState(() { _isLoading = false; });
+      _saveWebCache();
+    }
   }
 
   void _handlePlayback(MP3File file) async {
@@ -429,6 +482,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   }
 
   Future<void> _play(MP3File file) async {
+    if (kIsWeb && file.webFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please reload files to grant playback access.')));
+      return;
+    }
     _log('Playing: ${file.name}');
     if (_filter.trim().isNotEmpty) {
       _onFilterSubmitted(_filter);
@@ -496,8 +553,18 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     await prefs.setStringList('filterHistory', _filterHistory);
   }
 
+  Future<void> _toggleEasyMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isEasyMode = !_isEasyMode;
+      prefs.setBool('easyMode', _isEasyMode);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final double scale = _isEasyMode ? 1.4 : 1.0;
+    
     final filteredFiles = _allFiles.where((file) {
       if (_filter.isEmpty) return true;
       final query = _filter.toLowerCase();
@@ -515,20 +582,22 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 64 * scale,
         title: Row(
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('SingSong', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan, fontSize: 18, fontFamily: 'Montserrat')),
-                Text('v$appVersion', style: const TextStyle(fontSize: 10, color: Colors.grey, fontFamily: 'Montserrat', fontWeight: FontWeight.w300)),
+                Text('SingSong', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan, fontSize: 18 * scale, fontFamily: 'Montserrat')),
+                if (!_isEasyMode) Text('v$appVersion', style: const TextStyle(fontSize: 10, color: Colors.grey, fontFamily: 'Montserrat', fontWeight: FontWeight.w300)),
               ],
             ),
             const SizedBox(width: 24),
             Expanded(
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 500),
+                  constraints: BoxConstraints(maxWidth: 500 * scale),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       return RawAutocomplete<String>(
@@ -546,22 +615,22 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                           return TextField(
                             controller: controller,
                             focusNode: focusNode,
-                            style: const TextStyle(fontSize: 14, fontFamily: 'Montserrat'),
+                            style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat'),
                             decoration: InputDecoration(
-                              hintText: 'Filter music...',
-                              prefixIcon: const Icon(Icons.search, color: Colors.cyan, size: 20),
+                              hintText: _isEasyMode ? 'Search' : 'Filter music...',
+                              prefixIcon: Icon(Icons.search, color: Colors.cyan, size: 20 * scale),
                               suffixIcon: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   if (_filter.isNotEmpty) 
-                                    IconButton(icon: const Icon(Icons.clear, size: 16), onPressed: () { controller.clear(); setState(() { _filter = ''; }); }),
-                                  const Icon(Icons.arrow_drop_down, color: Colors.grey, size: 20),
+                                    IconButton(icon: Icon(Icons.clear, size: 16 * scale), onPressed: () { controller.clear(); setState(() { _filter = ''; }); }),
+                                  Icon(Icons.arrow_drop_down, color: Colors.grey, size: 20 * scale),
                                   const SizedBox(width: 8),
                                 ],
                               ),
                               filled: true,
                               fillColor: Colors.black26,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(20 * scale), borderSide: BorderSide.none),
                               contentPadding: const EdgeInsets.symmetric(vertical: 0),
                             ),
                             onChanged: (value) => setState(() { _filter = value; }),
@@ -577,7 +646,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                               color: const Color(0xFF2A2A2A),
                               child: Container(
                                 width: constraints.maxWidth,
-                                constraints: const BoxConstraints(maxHeight: 250),
+                                constraints: BoxConstraints(maxHeight: 250 * scale),
                                 child: ListView.builder(
                                   padding: EdgeInsets.zero,
                                   shrinkWrap: true,
@@ -585,9 +654,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                   itemBuilder: (BuildContext context, int index) {
                                     final String option = options.elementAt(index);
                                     return ListTile(
-                                      title: Text(option, style: const TextStyle(fontSize: 13, fontFamily: 'Montserrat')),
+                                      title: Text(option, style: TextStyle(fontSize: 13 * scale, fontFamily: 'Montserrat')),
                                       trailing: IconButton(
-                                        icon: const Icon(Icons.close, size: 16, color: Colors.grey),
+                                        icon: Icon(Icons.close, size: 16 * scale, color: Colors.grey),
                                         onPressed: () async {
                                           setState(() { _filterHistory.remove(option); });
                                           final prefs = await SharedPreferences.getInstance();
@@ -611,18 +680,23 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: Icon(_isEasyMode ? Icons.zoom_in : Icons.zoom_out, color: _isEasyMode ? Colors.cyan : Colors.grey, size: 24 * scale),
+            onPressed: _toggleEasyMode,
+            tooltip: 'Toggle Easy Mode',
+          ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
+            icon: Icon(Icons.more_vert, size: 24 * scale),
             onSelected: (value) {
               if (value == 'load') _handlePickSourceFiles();
               if (value == 'dest') _pickDestinationDirectory();
               if (value == 'logs') _downloadLogs();
             },
             itemBuilder: (context) => [
-              const PopupMenuItem(value: 'load', child: ListTile(leading: Icon(Icons.library_music_outlined, size: 20), title: Text('Load MP3s', style: TextStyle(fontSize: 14, fontFamily: 'Montserrat')), dense: true)),
-              if (!kIsWeb) const PopupMenuItem(value: 'dest', child: ListTile(leading: Icon(Icons.folder_outlined, size: 20), title: Text('Set Destination', style: TextStyle(fontSize: 14, fontFamily: 'Montserrat')), dense: true)),
-              const PopupMenuItem(value: 'logs', child: ListTile(leading: Icon(Icons.description_outlined, size: 20), title: Text('Download Logs', style: TextStyle(fontSize: 14, fontFamily: 'Montserrat')), dense: true)),
-              PopupMenuItem(enabled: false, child: Text(sourceInfo, style: const TextStyle(fontSize: 11, color: Colors.grey, fontFamily: 'Montserrat'))),
+              PopupMenuItem(value: 'load', child: ListTile(leading: Icon(Icons.library_music_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Load' : 'Load MP3s', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
+              if (!kIsWeb) PopupMenuItem(value: 'dest', child: ListTile(leading: Icon(Icons.folder_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Save to' : 'Set Destination', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
+              PopupMenuItem(value: 'logs', child: ListTile(leading: Icon(Icons.description_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Logs' : 'Download Logs', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
+              PopupMenuItem(enabled: false, child: Text(sourceInfo, style: TextStyle(fontSize: 11 * scale, color: Colors.grey, fontFamily: 'Montserrat'))),
             ],
           ),
           const SizedBox(width: 8),
@@ -635,7 +709,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
               if (_isLoading)
                 LinearProgressIndicator(
                   value: _totalFiles > 0 ? _filesProcessed / _totalFiles : 0,
-                  minHeight: 2,
+                  minHeight: 2 * scale,
                   backgroundColor: Colors.white10,
                   valueColor: const AlwaysStoppedAnimation<Color>(Colors.cyan),
                 ),
@@ -647,10 +721,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                       child: Container(
                         color: const Color(0xFF121212),
                         child: _allFiles.isEmpty && !_isLoading
-                          ? const Center(child: Text('Open the menu to load MP3s.', style: TextStyle(color: Colors.grey, fontFamily: 'Montserrat')))
+                          ? Center(child: Text(_isEasyMode ? 'Press menu to start.' : 'Load MP3s to begin.', style: TextStyle(color: Colors.grey, fontFamily: 'Montserrat', fontSize: 16 * scale)))
                           : GridView.builder(
-                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 180, childAspectRatio: 0.7, crossAxisSpacing: 12, mainAxisSpacing: 12),
+                              padding: EdgeInsets.fromLTRB(16, 16, 16, 120 * scale),
+                              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 180 * scale, childAspectRatio: 0.7, crossAxisSpacing: 12 * scale, mainAxisSpacing: 12 * scale),
                               itemCount: filteredFiles.length,
                               itemBuilder: (context, index) {
                                 final file = filteredFiles[index];
@@ -663,16 +737,16 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                   child: GestureDetector(
                                     onTap: () => _toggleSelection(file),
                                     child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(16),
+                                      borderRadius: BorderRadius.circular(16 * scale),
                                       child: BackdropFilter(
                                         filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
                                         child: Container(
                                           decoration: BoxDecoration(
                                             color: isSelected ? Colors.cyan.withOpacity(0.15) : Colors.white.withOpacity(0.05),
-                                            borderRadius: BorderRadius.circular(16),
+                                            borderRadius: BorderRadius.circular(16 * scale),
                                             border: Border.all(
-                                              color: isSelected ? Colors.cyan.withOpacity(0.5) : Colors.white.withOpacity(0.1),
-                                              width: 1.5,
+                                              color: isSelected ? Colors.cyan : Colors.white.withOpacity(0.1),
+                                              width: isSelected ? 2.5 : 1.5,
                                             ),
                                           ),
                                           child: Column(
@@ -693,21 +767,21 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                                             colors: [Colors.grey[800]!, Colors.grey[900]!],
                                                           ),
                                                         ),
-                                                        child: const Icon(Icons.music_note, size: 48, color: Colors.white10)
+                                                        child: Icon(Icons.music_note, size: 48 * scale, color: Colors.white10)
                                                       ),
-                                                    if (isSelected) const Positioned(top: 8, left: 8, child: Icon(Icons.check_circle, color: Colors.cyan, size: 22)),
+                                                    if (isSelected) Positioned(top: 8 * scale, left: 8 * scale, child: Icon(Icons.check_circle, color: Colors.cyan, size: 24 * scale)),
                                                     Positioned(
-                                                      bottom: 8, right: 8,
+                                                      bottom: 8 * scale, right: 8 * scale,
                                                       child: GestureDetector(
                                                         onTap: () => _handlePlayback(file),
                                                         child: Container(
-                                                          padding: const EdgeInsets.all(8), 
+                                                          padding: EdgeInsets.all(8 * scale), 
                                                           decoration: BoxDecoration(
                                                             color: Colors.cyan, 
                                                             shape: BoxShape.circle,
                                                             boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))]
                                                           ), 
-                                                          child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.black, size: 20)
+                                                          child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.black, size: 24 * scale)
                                                         ),
                                                       ),
                                                     ),
@@ -715,7 +789,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                                 ),
                                               ),
                                               Padding(
-                                                padding: const EdgeInsets.all(10.0),
+                                                padding: EdgeInsets.all(10.0 * scale),
                                                 child: Column(
                                                   crossAxisAlignment: CrossAxisAlignment.start,
                                                   children: [
@@ -723,19 +797,19 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                                       file.displayTitle, 
                                                       maxLines: 1, 
                                                       overflow: TextOverflow.ellipsis, 
-                                                      style: const TextStyle(
-                                                        fontSize: 12, 
+                                                      style: TextStyle(
+                                                        fontSize: 12 * scale, 
                                                         fontWeight: FontWeight.w600, 
-                                                        color: Colors.white,
+                                                        color: isCurrent ? Colors.cyan : Colors.white.withOpacity(0.9),
                                                         fontFamily: 'Montserrat',
-                                                      ).copyWith(color: isCurrent ? Colors.cyan : Colors.white.withOpacity(0.9), fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600)
+                                                      )
                                                     ),
-                                                    const SizedBox(height: 2),
+                                                    SizedBox(height: 2 * scale),
                                                     Text(
                                                       file.displayArtist, 
                                                       maxLines: 1, 
                                                       overflow: TextOverflow.ellipsis, 
-                                                      style: const TextStyle(fontSize: 10, color: Colors.white54, fontWeight: FontWeight.w300, fontFamily: 'Montserrat')
+                                                      style: TextStyle(fontSize: 10 * scale, color: Colors.white54, fontWeight: FontWeight.w300, fontFamily: 'Montserrat')
                                                     ),
                                                   ],
                                                 ),
@@ -751,47 +825,48 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                             ),
                       ),
                     ),
-                    const VerticalDivider(width: 1, color: Colors.white10),
+                    VerticalDivider(width: 1, color: Colors.white10),
                     Expanded(
                       flex: 1,
                       child: Column(
                         children: [
                           Padding(
-                            padding: const EdgeInsets.all(16.0),
+                            padding: EdgeInsets.all(16.0 * scale),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('Selected', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, fontFamily: 'Montserrat')),
-                                Text('(${_selectedFiles.length})', style: const TextStyle(fontSize: 12, color: Colors.grey, fontFamily: 'Montserrat')),
+                                Text(_isEasyMode ? 'Selected' : 'Selected Files', style: TextStyle(fontSize: 14 * scale, fontWeight: FontWeight.bold, fontFamily: 'Montserrat')),
+                                Text('(${_selectedFiles.length})', style: TextStyle(fontSize: 12 * scale, color: Colors.grey, fontFamily: 'Montserrat')),
                                 const Spacer(),
                                 ElevatedButton.icon(
                                   onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null, 
-                                  icon: Icon(kIsWeb ? Icons.download : Icons.copy, size: 18), 
-                                  label: Text(kIsWeb ? 'Download' : 'Copy Now', style: const TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.w600)), 
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black, elevation: 0)
+                                  icon: Icon(kIsWeb ? Icons.download : Icons.copy, size: 18 * scale), 
+                                  label: Text(kIsWeb ? (_isEasyMode ? 'Get' : 'Download') : (_isEasyMode ? 'Save' : 'Copy Now'), style: TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.w600, fontSize: 13 * scale)), 
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black, elevation: 0, padding: EdgeInsets.symmetric(horizontal: 16 * scale, vertical: 12 * scale))
                                 ),
                               ],
                             ),
                           ),
                           Expanded(
                             child: ListView(
-                              padding: const EdgeInsets.only(bottom: 100),
+                              padding: EdgeInsets.only(bottom: 120 * scale),
                               children: _selectedFiles.map((file) => ListTile(
+                                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4 * scale),
                                 leading: Container(
-                                  width: 40,
-                                  height: 40,
+                                  width: 40 * scale,
+                                  height: 40 * scale,
                                   decoration: BoxDecoration(
                                     color: Colors.grey[900],
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(8 * scale),
                                   ),
                                   clipBehavior: Clip.antiAlias,
                                   child: file.artwork != null 
                                       ? Image.memory(file.artwork!, fit: BoxFit.cover)
-                                      : const Icon(Icons.music_note, size: 20, color: Colors.white10),
+                                      : Icon(Icons.music_note, size: 20 * scale, color: Colors.white10),
                                 ),
-                                title: Text(file.displayTitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Montserrat'), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                subtitle: Text(file.displayArtist, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w300, fontFamily: 'Montserrat', color: Colors.grey)),
-                                trailing: IconButton(icon: const Icon(Icons.close, size: 16, color: Colors.grey), onPressed: () => _toggleSelection(file)),
+                                title: Text(file.displayTitle, style: TextStyle(fontSize: 12 * scale, fontWeight: FontWeight.w600, fontFamily: 'Montserrat'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                subtitle: Text(file.displayArtist, style: TextStyle(fontSize: 10 * scale, fontWeight: FontWeight.w300, fontFamily: 'Montserrat', color: Colors.grey)),
+                                trailing: IconButton(icon: Icon(Icons.close, size: 16 * scale, color: Colors.grey), onPressed: () => _toggleSelection(file)),
                               )).toList(),
                             ),
                           ),
@@ -805,35 +880,34 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           ),
           if (_currentFile != null) 
             Positioned(
-              left: 20,
-              right: 20,
-              bottom: 20,
-              child: _buildFloatingPlayer(),
+              left: 20 * scale,
+              right: 20 * scale,
+              bottom: 20 * scale,
+              child: _buildFloatingPlayer(scale),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildFloatingPlayer() {
+  Widget _buildFloatingPlayer(double scale) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(20 * scale),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
         child: Container(
           decoration: BoxDecoration(
             color: const Color(0xFF1F1F1F).withOpacity(0.85),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(20 * scale),
             border: Border.all(color: Colors.white10, width: 1),
             boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 10, offset: const Offset(0, 4))],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Tiny seek bar at the very top
               SliderTheme(
                 data: SliderTheme.of(context).copyWith(
-                  trackHeight: 2,
+                  trackHeight: 2 * scale,
                   thumbShape: SliderComponentShape.noThumb,
                   overlayShape: SliderComponentShape.noOverlay,
                   activeTrackColor: Colors.cyan,
@@ -849,36 +923,36 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                padding: EdgeInsets.fromLTRB(16 * scale, 8 * scale, 16 * scale, 12 * scale),
                 child: Row(
                   children: [
                     Container(
-                      width: 44, height: 44,
+                      width: 44 * scale, height: 44 * scale,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(8 * scale),
                         color: Colors.grey[900],
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: _currentFile?.artwork != null 
                           ? Image.memory(_currentFile!.artwork!, fit: BoxFit.cover)
-                          : const Icon(Icons.music_note, color: Colors.white10),
+                          : Icon(Icons.music_note, color: Colors.white10, size: 24 * scale),
                     ),
-                    const SizedBox(width: 16),
+                    SizedBox(width: 16 * scale),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(_currentFile?.displayTitle ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white, fontFamily: 'Montserrat'), maxLines: 1, overflow: TextOverflow.ellipsis),
-                          Text('${_formatDuration(_position)} / ${_formatDuration(_duration)}', style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w300, fontFamily: 'Montserrat')),
+                          Text(_currentFile?.displayTitle ?? 'Unknown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13 * scale, color: Colors.white, fontFamily: 'Montserrat'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text('${_formatDuration(_position)} / ${_formatDuration(_duration)}', style: TextStyle(color: Colors.grey, fontSize: 10 * scale, fontWeight: FontWeight.w300, fontFamily: 'Montserrat')),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: Icon(_playerState == PlayerState.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 32, color: Colors.cyan),
+                      icon: Icon(_playerState == PlayerState.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 36 * scale, color: Colors.cyan),
                       onPressed: () => _handlePlayback(_currentFile!),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.stop_rounded, size: 24, color: Colors.grey),
+                      icon: Icon(Icons.stop_rounded, size: 28 * scale, color: Colors.grey),
                       onPressed: () async {
                         await _audioPlayer.stop();
                         setState(() { 
