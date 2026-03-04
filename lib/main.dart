@@ -100,6 +100,8 @@ class MP3File {
   String get identity => '$name-$size';
 }
 
+enum ArtworkFilter { all, hasArtwork, missingArtwork }
+
 class SingSongHomePage extends StatefulWidget {
   const SingSongHomePage({super.key});
 
@@ -131,6 +133,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   final TextEditingController _filterController = TextEditingController();
   final FocusNode _filterFocusNode = FocusNode();
   List<String> _filterHistory = [];
+  ArtworkFilter _artworkFilter = ArtworkFilter.all;
 
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
@@ -652,115 +655,140 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   Widget build(BuildContext context) {
     final double scale = _isEasyMode ? 1.4 : 1.0;
     final filteredFiles = _allFiles.where((file) {
-      if (_filter.isEmpty) return true;
-      final query = _filter.toLowerCase();
-      final words = query.split(' ').where((w) => w.isNotEmpty).toList();
-      
-      return words.every((word) => 
-        file.name.toLowerCase().contains(word) || 
-        (file.title?.toLowerCase().contains(word) ?? false) || 
-        (word.startsWith('artist:') ? (file.artist?.toLowerCase().contains(word.replaceFirst('artist:', '')) ?? false) : (file.artist?.toLowerCase().contains(word) ?? false))
-      );
+      // 1. Apply multi-word search filter
+      if (_filter.isNotEmpty) {
+        final query = _filter.toLowerCase();
+        final words = query.split(' ').where((w) => w.isNotEmpty).toList();
+        final matchesWords = words.every((word) => 
+          file.name.toLowerCase().contains(word) || 
+          (file.title?.toLowerCase().contains(word) ?? false) || 
+          (file.artist?.toLowerCase().contains(word) ?? false)
+        );
+        if (!matchesWords) return false;
+      }
+
+      // 2. Apply Artwork Radio Button Filter
+      switch (_artworkFilter) {
+        case ArtworkFilter.hasArtwork:
+          return file.artwork != null;
+        case ArtworkFilter.missingArtwork:
+          return file.artwork == null;
+        case ArtworkFilter.all:
+        default:
+          return true;
+      }
     }).toList();
 
     String sourceInfo = _sourcePath ?? 'No library loaded';
 
     return Scaffold(
       appBar: AppBar(
-        toolbarHeight: 64 * scale,
-        title: Row(
+        toolbarHeight: 100 * scale,
+        title: Column(
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+            Row(
               children: [
-                Text('SingSong', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan, fontSize: 18 * scale, fontFamily: 'Montserrat')),
-                if (!_isEasyMode) Text('v$appVersion', style: const TextStyle(fontSize: 10, color: Colors.grey, fontFamily: 'Montserrat', fontWeight: FontWeight.w300)),
-              ],
-            ),
-            const SizedBox(width: 24),
-            Expanded(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 500 * scale),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      return RawAutocomplete<String>(
-                        textEditingController: _filterController,
-                        focusNode: _filterFocusNode,
-                        optionsBuilder: (TextEditingValue textEditingValue) {
-                          if (textEditingValue.text.isEmpty) return _filterHistory;
-                          return _filterHistory.where((String option) => option.toLowerCase().contains(textEditingValue.text.toLowerCase()));
-                        },
-                        onSelected: (String selection) {
-                          setState(() { _filter = selection; });
-                          _onFilterSubmitted(selection);
-                        },
-                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                          return TextField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat'),
-                            decoration: InputDecoration(
-                              hintText: _isEasyMode ? 'Search' : 'Filter music...',
-                              prefixIcon: Icon(Icons.search, color: Colors.cyan, size: 20 * scale),
-                              suffixIcon: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (_filter.isNotEmpty) 
-                                    IconButton(icon: Icon(Icons.clear, size: 16 * scale), onPressed: () { controller.clear(); setState(() { _filter = ''; }); }),
-                                  Icon(Icons.arrow_drop_down, color: Colors.grey, size: 20 * scale),
-                                  const SizedBox(width: 8),
-                                ],
-                              ),
-                              filled: true,
-                              fillColor: Colors.black26,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(20 * scale), borderSide: BorderSide.none),
-                              contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                            ),
-                            onChanged: (value) => setState(() { _filter = value; }),
-                            onSubmitted: (value) { _onFilterSubmitted(value); onFieldSubmitted(); },
-                          );
-                        },
-                        optionsViewBuilder: (context, onSelected, options) {
-                          return Align(
-                            alignment: Alignment.topLeft,
-                            child: Material(
-                              elevation: 8.0,
-                              borderRadius: BorderRadius.circular(12),
-                              color: const Color(0xFF2A2A2A),
-                              child: Container(
-                                width: constraints.maxWidth,
-                                constraints: BoxConstraints(maxHeight: 250 * scale),
-                                child: ListView.builder(
-                                  padding: EdgeInsets.zero,
-                                  shrinkWrap: true,
-                                  itemCount: options.length,
-                                  itemBuilder: (BuildContext context, int index) {
-                                    final String option = options.elementAt(index);
-                                    return ListTile(
-                                      title: Text(option, style: TextStyle(fontSize: 13 * scale, fontFamily: 'Montserrat')),
-                                      trailing: IconButton(
-                                        icon: Icon(Icons.close, size: 16 * scale, color: Colors.grey),
-                                        onPressed: () async {
-                                          setState(() { _filterHistory.remove(option); });
-                                          final prefs = await SharedPreferences.getInstance();
-                                          await prefs.setStringList('filterHistory', _filterHistory);
-                                        },
-                                      ),
-                                      onTap: () => onSelected(option),
-                                    );
-                                  },
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('SingSong', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan, fontSize: 18 * scale, fontFamily: 'Montserrat')),
+                    if (!_isEasyMode) Text('v$appVersion', style: const TextStyle(fontSize: 10, color: Colors.grey, fontFamily: 'Montserrat', fontWeight: FontWeight.w300)),
+                  ],
+                ),
+                const SizedBox(width: 24),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: 500 * scale),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return RawAutocomplete<String>(
+                            textEditingController: _filterController,
+                            focusNode: _filterFocusNode,
+                            optionsBuilder: (TextEditingValue textEditingValue) {
+                              if (textEditingValue.text.isEmpty) return _filterHistory;
+                              return _filterHistory.where((String option) => option.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                            },
+                            onSelected: (String selection) {
+                              setState(() { _filter = selection; });
+                              _onFilterSubmitted(selection);
+                            },
+                            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                              return TextField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat'),
+                                decoration: InputDecoration(
+                                  hintText: _isEasyMode ? 'Search' : 'Filter music...',
+                                  prefixIcon: Icon(Icons.search, color: Colors.cyan, size: 20 * scale),
+                                  suffixIcon: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (_filter.isNotEmpty) 
+                                        IconButton(icon: Icon(Icons.clear, size: 16 * scale), onPressed: () { controller.clear(); setState(() { _filter = ''; }); }),
+                                      Icon(Icons.arrow_drop_down, color: Colors.grey, size: 20 * scale),
+                                      const SizedBox(width: 8),
+                                    ],
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.black26,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(20 * scale), borderSide: BorderSide.none),
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
                                 ),
-                              ),
-                            ),
+                                onChanged: (value) => setState(() { _filter = value; }),
+                                onSubmitted: (value) { _onFilterSubmitted(value); onFieldSubmitted(); },
+                              );
+                            },
+                            optionsViewBuilder: (context, onSelected, options) {
+                              return Align(
+                                alignment: Alignment.topLeft,
+                                child: Material(
+                                  elevation: 8.0,
+                                  borderRadius: BorderRadius.circular(12),
+                                  color: const Color(0xFF2A2A2A),
+                                  child: Container(
+                                    width: constraints.maxWidth,
+                                    constraints: BoxConstraints(maxHeight: 250 * scale),
+                                    child: ListView.builder(
+                                      padding: EdgeInsets.zero,
+                                      shrinkWrap: true,
+                                      itemCount: options.length,
+                                      itemBuilder: (BuildContext context, int index) {
+                                        final String option = options.elementAt(index);
+                                        return ListTile(
+                                          title: Text(option, style: TextStyle(fontSize: 13 * scale, fontFamily: 'Montserrat')),
+                                          trailing: IconButton(
+                                            icon: Icon(Icons.close, size: 16 * scale, color: Colors.grey),
+                                            onPressed: () async {
+                                              setState(() { _filterHistory.remove(option); });
+                                              final prefs = await SharedPreferences.getInstance();
+                                              await prefs.setStringList('filterHistory', _filterHistory);
+                                            },
+                                          ),
+                                          onTap: () => onSelected(option),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
                           );
-                        },
-                      );
-                    }
+                        }
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildArtworkRadio('All', ArtworkFilter.all, scale),
+                _buildArtworkRadio('Has artwork', ArtworkFilter.hasArtwork, scale),
+                _buildArtworkRadio('Artwork missing', ArtworkFilter.missingArtwork, scale),
+              ],
             ),
           ],
         ),
@@ -991,6 +1019,27 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildArtworkRadio(String label, ArtworkFilter value, double scale) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Radio<ArtworkFilter>(
+          value: value,
+          groupValue: _artworkFilter,
+          activeColor: Colors.cyan,
+          onChanged: (v) {
+            if (v != null) setState(() { _artworkFilter = v; });
+          },
+        ),
+        GestureDetector(
+          onTap: () => setState(() { _artworkFilter = value; }),
+          child: Text(label, style: TextStyle(fontSize: 12 * scale, fontFamily: 'Montserrat', color: _artworkFilter == value ? Colors.cyan : Colors.white70)),
+        ),
+        const SizedBox(width: 8),
+      ],
     );
   }
 
