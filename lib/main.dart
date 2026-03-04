@@ -11,6 +11,7 @@ import 'dart:convert';
 import 'dart:ui';
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
+import 'clipboard_util.dart';
 
 void main() {
   runApp(const SingSongApp());
@@ -108,7 +109,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.58+59';
+  static const String appVersion = '1.0.59+60';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -738,29 +739,19 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () async {
-                        if (kIsWeb) {
-                          try {
-                            final dynamic data = await html.window.navigator.clipboard?.read();
-                            if (data != null) {
-                              final dynamic items = data;
-                              for (var i = 0; i < items.length; i++) {
-                                final dynamic item = items[i];
-                                if (item.types.contains('image/png') || item.types.contains('image/jpeg')) {
-                                  final blob = await item.getType(item.types.contains('image/png') ? 'image/png' : 'image/jpeg');
-                                  final reader = html.FileReader();
-                                  reader.readAsArrayBuffer(blob);
-                                  await reader.onLoadEnd.first;
-                                  setDialogState(() { newArtwork = reader.result as Uint8List; });
-                                  return;
-                                }
-                              }
+                        try {
+                          final imageBytes = await getClipboardImage();
+                          if (imageBytes != null) {
+                            setDialogState(() { newArtwork = imageBytes; });
+                          } else {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No image found on clipboard.')));
                             }
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No image found on clipboard.')));
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Browser restricted clipboard access.')));
                           }
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Paste is optimized for Web.')));
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Clipboard access restricted or failed.')));
+                          }
                         }
                       },
                       icon: const Icon(Icons.paste, size: 18),
