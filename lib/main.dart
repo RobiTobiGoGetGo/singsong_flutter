@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart' show kIsWeb, Uint8List;
 import 'package:id3/id3.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'dart:io';
 import 'dart:convert';
 import 'dart:ui';
@@ -107,7 +108,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.49+50';
+  static const String appVersion = '1.0.50+51';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -215,10 +216,22 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   Future<void> _loadStoredPaths() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      List<String> history = prefs.getStringList('filterHistory') ?? [];
+      
+      try {
+        final defaults = await rootBundle.loadString('defaultFilterTerms.txt');
+        final defaultTerms = defaults.split('\n').map((s) => s.trim()).where((s) => s.isNotEmpty);
+        for (var term in defaultTerms) {
+          if (!history.contains(term)) history.add(term);
+        }
+      } catch (e) { _log('Error loading default filter terms: $e'); }
+
+      history.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
       setState(() { 
         _sourcePath = prefs.getString('sourcePath');
         _destinationPath = prefs.getString('destinationPath'); 
-        _filterHistory = prefs.getStringList('filterHistory') ?? [];
+        _filterHistory = history;
         _isEasyMode = prefs.getBool('easyMode') ?? false;
       });
     } catch (e) { _log('Error loading paths: $e'); }
@@ -618,9 +631,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return;
     setState(() {
-      _filterHistory.remove(trimmed);
-      _filterHistory.insert(0, trimmed);
-      if (_filterHistory.length > 20) _filterHistory.removeLast();
+      if (!_filterHistory.contains(trimmed)) {
+        _filterHistory.add(trimmed);
+        _filterHistory.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      }
     });
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('filterHistory', _filterHistory);
@@ -645,7 +659,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       return words.every((word) => 
         file.name.toLowerCase().contains(word) || 
         (file.title?.toLowerCase().contains(word) ?? false) || 
-        (file.artist?.toLowerCase().contains(word) ?? false)
+        (word.startsWith('artist:') ? (file.artist?.toLowerCase().contains(word.replaceFirst('artist:', '')) ?? false) : (file.artist?.toLowerCase().contains(word) ?? false))
       );
     }).toList();
 
