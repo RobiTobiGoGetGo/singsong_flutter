@@ -108,7 +108,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.57+58';
+  static const String appVersion = '1.0.58+59';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -326,8 +326,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             final cachedFile = cachedMap[identity]!;
             cachedFile.desktopPath = entity.path; // Update path in case it changed
             updatedList.add(cachedFile);
-            // Re-process to load artwork into memory (not stored in cache)
-            filesToProcess.add(cachedFile);
+            filesToProcess.add(cachedFile); // Load artwork into memory
           } else {
             final newFile = MP3File(
               name: p.basename(entity.path),
@@ -718,7 +717,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                       : const Icon(Icons.image_search, color: Colors.white10, size: 64),
                 ),
                 const SizedBox(height: 16),
-                const Text('Choose an image or try Paste button', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const Text('Choose an image or use Paste button', style: TextStyle(fontSize: 12, color: Colors.grey)),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -739,15 +738,29 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () async {
-                        try {
-                          final clipboardData = await Clipboard.getData('image/png');
-                          if (clipboardData != null && clipboardData.text != null) {
-                            // This button logic is kept for UI but raw binary paste often requires permissions or packages.
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Paste image is restricted by browser security.')));
+                        if (kIsWeb) {
+                          try {
+                            final dynamic data = await html.window.navigator.clipboard?.read();
+                            if (data != null) {
+                              final dynamic items = data;
+                              for (var i = 0; i < items.length; i++) {
+                                final dynamic item = items[i];
+                                if (item.types.contains('image/png') || item.types.contains('image/jpeg')) {
+                                  final blob = await item.getType(item.types.contains('image/png') ? 'image/png' : 'image/jpeg');
+                                  final reader = html.FileReader();
+                                  reader.readAsArrayBuffer(blob);
+                                  await reader.onLoadEnd.first;
+                                  setDialogState(() { newArtwork = reader.result as Uint8List; });
+                                  return;
+                                }
+                              }
+                            }
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No image found on clipboard.')));
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Browser restricted clipboard access.')));
                           }
-                        } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Paste error: System permission needed.')));
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Paste is optimized for Web.')));
                         }
                       },
                       icon: const Icon(Icons.paste, size: 18),
@@ -1058,21 +1071,21 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                                   crossAxisAlignment: CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
-                                                      file.displayTitle,
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
+                                                      file.displayTitle, 
+                                                      maxLines: 1, 
+                                                      overflow: TextOverflow.ellipsis, 
                                                       style: TextStyle(
-                                                        fontSize: 12 * scale,
-                                                        fontWeight: FontWeight.w600,
+                                                        fontSize: 12 * scale, 
+                                                        fontWeight: FontWeight.w600, 
                                                         color: isCurrent ? Colors.cyan : Colors.white.withOpacity(0.9),
                                                         fontFamily: 'Montserrat',
                                                       )
                                                     ),
                                                     SizedBox(height: 2 * scale),
                                                     Text(
-                                                      file.displayArtist,
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
+                                                      file.displayArtist, 
+                                                      maxLines: 1, 
+                                                      overflow: TextOverflow.ellipsis, 
                                                       style: TextStyle(fontSize: 10 * scale, color: Colors.white54, fontWeight: FontWeight.w300, fontFamily: 'Montserrat')
                                                     ),
                                                   ],
@@ -1111,9 +1124,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                   SizedBox(width: 4 * scale),
                                 ],
                                 ElevatedButton.icon(
-                                  onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null,
-                                  icon: Icon(kIsWeb ? Icons.download : Icons.copy, size: 18 * scale),
-                                  label: Text(kIsWeb ? (_isEasyMode ? 'Get' : 'Download') : (_isEasyMode ? 'Save' : 'Copy Now'), style: TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.w600, fontSize: 13 * scale)),
+                                  onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null, 
+                                  icon: Icon(kIsWeb ? Icons.download : Icons.copy, size: 18 * scale), 
+                                  label: Text(kIsWeb ? (_isEasyMode ? 'Get' : 'Download') : (_isEasyMode ? 'Save' : 'Copy Now'), style: TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.w600, fontSize: 13 * scale)), 
                                   style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black, elevation: 0, padding: EdgeInsets.symmetric(horizontal: 16 * scale, vertical: 12 * scale))
                                 ),
                               ],
@@ -1140,18 +1153,18 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                       borderRadius: BorderRadius.circular(8 * scale),
                                     ),
                                     clipBehavior: Clip.antiAlias,
-                                    child: file.artwork != null
+                                    child: file.artwork != null 
                                         ? Image.memory(file.artwork!, fit: BoxFit.cover)
                                         : Icon(Icons.music_note, size: 20 * scale, color: Colors.white10),
                                   ),
-                                  title: Text(file.displayTitle,
+                                  title: Text(file.displayTitle, 
                                     style: TextStyle(
-                                      fontSize: 12 * scale,
-                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12 * scale, 
+                                      fontWeight: FontWeight.w600, 
                                       fontFamily: 'Montserrat',
                                       color: _currentFile == file ? Colors.cyan : Colors.white,
-                                    ),
-                                    maxLines: 1,
+                                    ), 
+                                    maxLines: 1, 
                                     overflow: TextOverflow.ellipsis
                                   ),
                                   subtitle: Text(file.displayArtist, style: TextStyle(fontSize: 10 * scale, fontWeight: FontWeight.w300, fontFamily: 'Montserrat', color: Colors.grey)),
@@ -1168,7 +1181,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
               ),
             ],
           ),
-          if (_currentFile != null)
+          if (_currentFile != null) 
             Positioned(
               left: 20 * scale,
               right: 20 * scale,

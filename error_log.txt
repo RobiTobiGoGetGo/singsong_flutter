@@ -1,0 +1,16 @@
+Target dart2js failed: ProcessException: Process exited abnormally with exit code 1:
+lib/main.dart:745:59:
+Error: A value of type 'DataTransfer' can't be assigned to a variable of type 'List<dynamic>'.
+ - 'DataTransfer' is from 'dart:html'.
+ - 'List' is from 'dart:core'.
+                              final List<dynamic> items = data;
+                                                          ^
+Error: Compilation failed.
+  Command: C:\Users\robch\flutter_windows_3.38.9-stable\flutter\bin\cache\dart-sdk\bin\dart.exe compile js
+  --platform-binaries=C:\Users\robch\flutter_windows_3.38.9-stable\flutter\bin\cache\flutter_web_sdk\kernel --invoker=flutter_tool -Ddart.vm.product=true -DFLUTTER_VERSION=3.41.2
+  -DFLUTTER_CHANNEL=stable -DFLUTTER_GIT_URL=https://github.com/flutter/flutter.git -DFLUTTER_FRAMEWORK_REVISION=90673a4eef -DFLUTTER_ENGINE_REVISION=6c0baaebf7
+  -DFLUTTER_DART_VERSION=3.11.0 -DFLUTTER_WEB_USE_SKIA=true -DFLUTTER_WEB_USE_SKWASM=false
+  -DFLUTTER_WEB_CANVASKIT_URL=https://www.gstatic.com/flutter-canvaskit/6c0baaebf70e0148f485f27d5616b3d3382da7bf/ --native-null-assertions --no-source-maps -O4 --minify -o
+  C:\Users\robch\AndroidStudioProjects\singsong_flutter\.dart_tool\flutter_build\7402da31b4a3ca20320981e110718354\app.dill
+  --packages=C:\Users\robch\AndroidStudioProjects\singsong_flutter\.dart_tool\package_config.json --cfe-only
+  C:\Users\robch\AndroidStudioProjects\singsong_flutter\.dart_tool\flutter_build\7402da31b4a3ca20320981e110718354\main.dart
