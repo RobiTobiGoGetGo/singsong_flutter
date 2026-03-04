@@ -109,7 +109,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.59+60';
+  static const String appVersion = '1.0.60+61';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -676,121 +676,62 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             ],
           ),
         ),
-        if (_isAdminMode)
-          PopupMenuItem(
-            onTap: () => _showEditArtworkDialog(context, file),
-            child: Row(
-              children: [
-                const Icon(Icons.image_outlined, color: Colors.cyan, size: 20),
-                const SizedBox(width: 12),
-                const Text('Edit Artwork', style: TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'Montserrat')),
-              ],
-            ),
+        PopupMenuItem(
+          onTap: () => _refreshFileDetails(file),
+          child: Row(
+            children: [
+              const Icon(Icons.refresh, color: Colors.cyan, size: 20),
+              const SizedBox(width: 12),
+              const Text('Refresh Details', style: TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'Montserrat')),
+            ],
           ),
+        ),
       ],
     );
   }
 
-  Future<void> _showEditArtworkDialog(BuildContext context, MP3File file) async {
-    Uint8List? newArtwork;
-
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF1F1F1F),
-            title: Text('Edit Artwork - ${file.name}', style: const TextStyle(color: Colors.cyan, fontSize: 16, fontFamily: 'Montserrat')),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 200, height: 200,
-                  decoration: BoxDecoration(
-                    color: Colors.black26,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: newArtwork != null
-                    ? Image.memory(newArtwork!, fit: BoxFit.cover)
-                    : file.artwork != null
-                      ? Image.memory(file.artwork!, fit: BoxFit.cover)
-                      : const Icon(Icons.image_search, color: Colors.white10, size: 64),
-                ),
-                const SizedBox(height: 16),
-                const Text('Choose an image or use Paste button', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
-                        if (result != null && result.files.first.bytes != null) {
-                          setDialogState(() { newArtwork = result.files.first.bytes; });
-                        } else if (result != null && result.files.first.path != null) {
-                          setDialogState(() { newArtwork = File(result.files.first.path!).readAsBytesSync(); });
-                        }
-                      },
-                      icon: const Icon(Icons.file_upload, size: 18),
-                      label: const Text('Choose'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        try {
-                          final imageBytes = await getClipboardImage();
-                          if (imageBytes != null) {
-                            setDialogState(() { newArtwork = imageBytes; });
-                          } else {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No image found on clipboard.')));
-                            }
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Clipboard access restricted or failed.')));
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.paste, size: 18),
-                      label: const Text('Paste'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[800], foregroundColor: Colors.white),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
-              ElevatedButton(
-                onPressed: newArtwork == null ? null : () async {
-                  bool? confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Update Artwork?'),
-                      content: const Text('This will update the song display. Continue?'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
-                        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Yes')),
-                      ],
-                    ),
-                  );
-                  if (confirm == true) {
-                    setState(() { file.artwork = newArtwork; });
-                    _saveLibraryCache();
-                    Navigator.pop(context);
-                  }
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black),
-                child: const Text('Apply Changes'),
-              ),
-            ],
-          );
+  Future<void> _refreshFileDetails(MP3File file) async {
+    try {
+      Uint8List? bytes;
+      if (kIsWeb) {
+        if (file.webFile != null) {
+          final reader = html.FileReader();
+          reader.readAsArrayBuffer(file.webFile);
+          await reader.onLoadEnd.first;
+          bytes = reader.result as Uint8List;
         }
-      ),
-    );
+      } else {
+        if (file.desktopPath != null) {
+          final f = File(file.desktopPath!);
+          if (await f.exists()) {
+            bytes = await f.readAsBytes();
+          }
+        }
+      }
+
+      if (bytes != null) {
+        setState(() {
+          _extractMetadata(file, bytes!);
+          if (kIsWeb) {
+            if (file.url != null) {
+              try { html.Url.revokeObjectUrl(file.url!); } catch (_) {}
+            }
+            final blob = html.Blob([bytes!]);
+            file.url = html.Url.createObjectUrlFromBlob(blob);
+          }
+        });
+        await _saveLibraryCache();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Refreshed details for: ${file.name}')));
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File not found or inaccessible.')));
+        }
+      }
+    } catch (e) {
+      _log('Refresh details error: $e');
+    }
   }
 
   @override
