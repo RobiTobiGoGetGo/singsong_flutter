@@ -107,7 +107,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.48+49';
+  static const String appVersion = '1.0.49+50';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -640,9 +640,13 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     final filteredFiles = _allFiles.where((file) {
       if (_filter.isEmpty) return true;
       final query = _filter.toLowerCase();
-      return file.name.toLowerCase().contains(query) || 
-             (file.title?.toLowerCase().contains(query) ?? false) || 
-             (file.artist?.toLowerCase().contains(query) ?? false);
+      final words = query.split(' ').where((w) => w.isNotEmpty).toList();
+      
+      return words.every((word) => 
+        file.name.toLowerCase().contains(word) || 
+        (file.title?.toLowerCase().contains(word) ?? false) || 
+        (file.artist?.toLowerCase().contains(word) ?? false)
+      );
     }).toList();
 
     String sourceInfo = _sourcePath ?? 'No library loaded';
