@@ -27,7 +27,7 @@ Copy-Item -Path "build/web/*" -Destination "." -Recurse -Force
 
 Write-Host "PUSHING TO GITHUB..." -ForegroundColor Yellow
 git add .
-git commit -m "Auto-Release v1.0.46+47"
+git commit -m "Auto-Release v1.0.47+48"
 if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1) {
     Write-Host "COMMIT FAILED!" -ForegroundColor Red
     exit
@@ -39,4 +39,4 @@ if ($LASTEXITCODE -ne 0) {
     exit
 }
 
-Write-Host "SUCCESS! v1.0.46+47 is now on GitHub." -ForegroundColor Green
+Write-Host "SUCCESS! v1.0.47+48 is now on GitHub." -ForegroundColor Green

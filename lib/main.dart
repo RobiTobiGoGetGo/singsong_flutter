@@ -104,10 +104,11 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.46+47';
+  static const String appVersion = '1.0.47+48';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
+  bool _isPlaylistMode = false;
   
   List<MP3File> _allFiles = [];
   final Set<MP3File> _selectedFiles = {};
@@ -155,10 +156,13 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     });
 
     _audioPlayer.onPlayerComplete.listen((event) {
-      if (mounted) setState(() { 
-        _playerState = PlayerState.stopped;
-        _position = Duration.zero;
-      });
+      if (mounted) {
+        if (_isPlaylistMode) {
+          _playNext();
+        } else {
+          _stopPlayback();
+        }
+      }
     });
   }
 
@@ -474,25 +478,26 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       } else if (_playerState == PlayerState.paused) { 
         await _audioPlayer.resume(); 
       } else {
-        await _play(file);
+        await _play(file, playlistMode: _isPlaylistMode);
       }
       return;
     }
     await _play(file);
   }
 
-  Future<void> _play(MP3File file) async {
+  Future<void> _play(MP3File file, {bool playlistMode = false}) async {
     if (kIsWeb && file.webFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please reload files to grant playback access.')));
       return;
     }
-    _log('Playing: ${file.name}');
+    _log('Playing: ${file.name} (Playlist: $playlistMode)');
     if (_filter.trim().isNotEmpty) {
       _onFilterSubmitted(_filter);
     }
     try {
       setState(() { 
         _currentFile = file; 
+        _isPlaylistMode = playlistMode;
         _position = Duration.zero;
         _duration = Duration.zero;
       });
@@ -502,6 +507,43 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         await _audioPlayer.play(DeviceFileSource(file.desktopPath!)); 
       }
     } catch (e) { _log('PLAYBACK ERROR: $e'); }
+  }
+
+  void _playNext() {
+    if (_selectedFiles.isEmpty || _currentFile == null) {
+      _stopPlayback();
+      return;
+    }
+
+    final selectedList = _selectedFiles.toList();
+    final currentIndex = selectedList.indexOf(_currentFile!);
+    
+    if (currentIndex != -1 && currentIndex < selectedList.length - 1) {
+      _play(selectedList[currentIndex + 1], playlistMode: true);
+    } else {
+      _stopPlayback();
+    }
+  }
+
+  void _playPrevious() {
+    if (_selectedFiles.isEmpty || _currentFile == null) return;
+
+    final selectedList = _selectedFiles.toList();
+    final currentIndex = selectedList.indexOf(_currentFile!);
+    
+    if (currentIndex > 0) {
+      _play(selectedList[currentIndex - 1], playlistMode: true);
+    }
+  }
+
+  void _stopPlayback() {
+    if (mounted) {
+      setState(() {
+        _playerState = PlayerState.stopped;
+        _position = Duration.zero;
+        _isPlaylistMode = false;
+      });
+    }
   }
 
   void _toggleSelection(MP3File file) {
@@ -838,6 +880,14 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                 Text(_isEasyMode ? 'Selected' : 'Selected Files', style: TextStyle(fontSize: 14 * scale, fontWeight: FontWeight.bold, fontFamily: 'Montserrat')),
                                 Text('(${_selectedFiles.length})', style: TextStyle(fontSize: 12 * scale, color: Colors.grey, fontFamily: 'Montserrat')),
                                 const Spacer(),
+                                if (_selectedFiles.isNotEmpty) ...[
+                                  IconButton(
+                                    onPressed: () => _play(_selectedFiles.first, playlistMode: true),
+                                    icon: Icon(Icons.play_circle_fill, size: 28 * scale, color: Colors.cyan),
+                                    tooltip: 'Play All',
+                                  ),
+                                  SizedBox(width: 4 * scale),
+                                ],
                                 ElevatedButton.icon(
                                   onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null, 
                                   icon: Icon(kIsWeb ? Icons.download : Icons.copy, size: 18 * scale), 
@@ -851,6 +901,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                             child: ListView(
                               padding: EdgeInsets.only(bottom: 120 * scale),
                               children: _selectedFiles.map((file) => ListTile(
+                                onTap: () => _play(file, playlistMode: true),
+                                hoverColor: Colors.white10,
                                 contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4 * scale),
                                 leading: Container(
                                   width: 40 * scale,
@@ -864,7 +916,16 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                       ? Image.memory(file.artwork!, fit: BoxFit.cover)
                                       : Icon(Icons.music_note, size: 20 * scale, color: Colors.white10),
                                 ),
-                                title: Text(file.displayTitle, style: TextStyle(fontSize: 12 * scale, fontWeight: FontWeight.w600, fontFamily: 'Montserrat'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                title: Text(file.displayTitle, 
+                                  style: TextStyle(
+                                    fontSize: 12 * scale, 
+                                    fontWeight: FontWeight.w600, 
+                                    fontFamily: 'Montserrat',
+                                    color: _currentFile == file ? Colors.cyan : Colors.white,
+                                  ), 
+                                  maxLines: 1, 
+                                  overflow: TextOverflow.ellipsis
+                                ),
                                 subtitle: Text(file.displayArtist, style: TextStyle(fontSize: 10 * scale, fontWeight: FontWeight.w300, fontFamily: 'Montserrat', color: Colors.grey)),
                                 trailing: IconButton(icon: Icon(Icons.close, size: 16 * scale, color: Colors.grey), onPressed: () => _toggleSelection(file)),
                               )).toList(),
@@ -948,17 +1009,22 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                       ),
                     ),
                     IconButton(
+                      icon: Icon(Icons.skip_previous_rounded, size: 28 * scale, color: _isPlaylistMode ? Colors.white : Colors.grey),
+                      onPressed: _isPlaylistMode ? _playPrevious : null,
+                    ),
+                    IconButton(
                       icon: Icon(_playerState == PlayerState.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 36 * scale, color: Colors.cyan),
                       onPressed: () => _handlePlayback(_currentFile!),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.skip_next_rounded, size: 28 * scale, color: _isPlaylistMode ? Colors.white : Colors.grey),
+                      onPressed: _isPlaylistMode ? _playNext : null,
                     ),
                     IconButton(
                       icon: Icon(Icons.stop_rounded, size: 28 * scale, color: Colors.grey),
                       onPressed: () async {
                         await _audioPlayer.stop();
-                        setState(() { 
-                          _playerState = PlayerState.stopped;
-                          _position = Duration.zero;
-                        });
+                        _stopPlayback();
                       },
                     ),
                   ],
