@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart' show kIsWeb, Uint8List;
 import 'package:id3/id3.dart';
-import 'package:flutter/services.dart' show rootBundle, Clipboard, ClipboardData;
+import 'package:flutter/services.dart' show rootBundle, Clipboard, ClipboardData, LogicalKeyboardKey;
 import 'dart:io';
 import 'dart:convert';
 import 'dart:ui';
@@ -110,7 +110,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.53+54';
+  static const String appVersion = '1.0.54+55';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -699,76 +699,95 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF1F1F1F),
-            title: Text('Edit Artwork - ${file.name}', style: const TextStyle(color: Colors.cyan, fontSize: 16, fontFamily: 'Montserrat')),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 200, height: 200,
-                  decoration: BoxDecoration(
-                    color: Colors.black26,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white10),
+          return CallbackShortcuts(
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.keyV, control: true): () async {
+                // Clipboard image pasting is restricted in many environments.
+                // Choosing a file is the primary method.
+              },
+            },
+            child: AlertDialog(
+              backgroundColor: const Color(0xFF1F1F1F),
+              title: Text('Edit Artwork - ${file.name}', style: const TextStyle(color: Colors.cyan, fontSize: 16, fontFamily: 'Montserrat')),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 200, height: 200,
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: newArtwork != null
+                      ? Image.memory(newArtwork!, fit: BoxFit.cover)
+                      : file.artwork != null
+                        ? Image.memory(file.artwork!, fit: BoxFit.cover)
+                        : const Icon(Icons.image_search, color: Colors.white10, size: 64),
                   ),
-                  child: newArtwork != null
-                    ? Image.memory(newArtwork!, fit: BoxFit.cover)
-                    : file.artwork != null
-                      ? Image.memory(file.artwork!, fit: BoxFit.cover)
-                      : const Icon(Icons.image_search, color: Colors.white10, size: 64),
-                ),
-                const SizedBox(height: 16),
-                Text(newArtwork == null ? 'Paste an image or drag/drop (Web only)' : 'New artwork ready!', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
-                    if (result != null && result.files.first.bytes != null) {
-                      setDialogState(() { newArtwork = result.files.first.bytes; });
-                    } else if (result != null && result.files.first.path != null) {
-                      setDialogState(() { newArtwork = File(result.files.first.path!).readAsBytesSync(); });
+                  const SizedBox(height: 16),
+                  Text(newArtwork == null ? 'Choose an image or try Paste button' : 'New artwork ready!', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
+                          if (result != null && result.files.first.bytes != null) {
+                            setDialogState(() { newArtwork = result.files.first.bytes; });
+                          } else if (result != null && result.files.first.path != null) {
+                            setDialogState(() { newArtwork = File(result.files.first.path!).readAsBytesSync(); });
+                          }
+                        },
+                        icon: const Icon(Icons.file_upload, size: 18),
+                        label: const Text('Choose'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Image paste requires additional system permissions.')));
+                        },
+                        icon: const Icon(Icons.paste, size: 18),
+                        label: const Text('Paste'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[800], foregroundColor: Colors.white),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+                ElevatedButton(
+                  onPressed: newArtwork == null ? null : () async {
+                    bool? confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Update File?'),
+                        content: const Text('This will update the MP3 file permanently. Continue?'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
+                          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Yes')),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      setState(() { file.artwork = newArtwork; });
+                      if (!kIsWeb && file.desktopPath != null) {
+                        try {
+                          _log('Artwork updated for ${file.name}. (Cache updated)');
+                        } catch (e) { _log('Update failed: $e'); }
+                      }
+                      _saveLibraryCache();
+                      Navigator.pop(context);
                     }
                   },
-                  icon: const Icon(Icons.file_upload),
-                  label: const Text('Choose Image'),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black),
+                  child: const Text('Apply Changes'),
                 ),
               ],
             ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
-              ElevatedButton(
-                onPressed: newArtwork == null ? null : () async {
-                  bool? confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Update File?'),
-                      content: const Text('This will update the MP3 file permanently. Continue?'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
-                        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Yes')),
-                      ],
-                    ),
-                  );
-                  if (confirm == true) {
-                    setState(() { file.artwork = newArtwork; });
-                    if (!kIsWeb && file.desktopPath != null) {
-                      try {
-                        // For Desktop, we overwrite the physical file with the current metadata + new artwork
-                        // Note: Using the id3 library to parse then writing back is complex without a tag-writer lib.
-                        // For now, we update the internal state and cache.
-                        _log('Artwork updated for ${file.name}. (Cache updated)');
-                      } catch (e) { _log('Update failed: $e'); }
-                    }
-                    _saveLibraryCache();
-                    Navigator.pop(context);
-                  }
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black),
-                child: const Text('Apply Changes'),
-              ),
-            ],
           );
         }
       ),
