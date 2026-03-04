@@ -66,24 +66,22 @@ class MP3File {
     this.artist,
   });
 
-  // Convert to JSON for persistence
+  // Convert to JSON for persistence - ONLY TEXT METADATA
   Map<String, dynamic> toJson() => {
     'name': name,
     'size': size,
     'title': title,
     'artist': artist,
     'desktopPath': desktopPath,
-    'artwork': artwork != null ? base64Encode(artwork!) : null,
   };
 
-  // Create from JSON
+  // Create from JSON - NO ARTWORK LOADING
   factory MP3File.fromJson(Map<String, dynamic> json) => MP3File(
     name: json['name'],
     size: json['size'],
     title: json['title'],
     artist: json['artist'],
     desktopPath: json['desktopPath'],
-    artwork: json['artwork'] != null ? base64Decode(json['artwork']) : null,
   );
 
   // Display Logic: Artist Group
@@ -110,7 +108,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.54+55';
+  static const String appVersion = '1.0.55+56';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -266,9 +264,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       _log('Saved ${_allFiles.length} files to library cache.');
     } catch (e) {
       _log('Error saving library cache: $e');
-      if (kIsWeb && e.toString().contains('QuotaExceededError')) {
-        _log('WARNING: Library cache too large for LocalStorage.');
-      }
     }
   }
 
