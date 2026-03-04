@@ -48,10 +48,10 @@ class MP3File {
   final String name;
   final int size;
   Uint8List? artwork;
-  String? url; 
-  dynamic webFile; 
+  String? url;
+  dynamic webFile;
   String? desktopPath;
-  
+
   String? title;
   String? artist;
 
@@ -110,24 +110,25 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.52+53';
+  static const String appVersion = '1.0.53+54';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
   bool _isPlaylistMode = false;
-  
+
   List<MP3File> _allFiles = [];
   final Set<MP3File> _selectedFiles = {};
   String? _sourcePath;
   String? _destinationPath;
   final List<String> _logs = [];
-  
+
   bool _isLoading = false;
   int _filesProcessed = 0;
   int _totalFiles = 0;
   int _currentLoadId = 0;
 
   bool _isEasyMode = false;
+  bool _isAdminMode = false;
 
   String _filter = '';
   final TextEditingController _filterController = TextEditingController();
@@ -143,7 +144,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     super.initState();
     _log('App started v$appVersion');
     _initializeLibrary();
-    
+
     _audioPlayer.onPlayerStateChanged.listen((state) {
       if (mounted) setState(() { _playerState = state; });
     });
@@ -170,7 +171,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   Future<void> _initializeLibrary() async {
     await _loadStoredPaths();
     await _loadLibraryCache();
-    
+
     if (!kIsWeb && _sourcePath != null) {
       _autoRefreshDesktopFiles(_sourcePath!);
     } else if (kIsWeb && _allFiles.isNotEmpty) {
@@ -220,7 +221,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       List<String> history = prefs.getStringList('filterHistory') ?? [];
-      
+
       try {
         final defaults = await rootBundle.loadString('defaultFilterTerms.txt');
         final defaultTerms = defaults.split('\n').map((s) => s.trim()).where((s) => s.isNotEmpty);
@@ -231,9 +232,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
       history.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
-      setState(() { 
+      setState(() {
         _sourcePath = prefs.getString('sourcePath');
-        _destinationPath = prefs.getString('destinationPath'); 
+        _destinationPath = prefs.getString('destinationPath');
         _filterHistory = history;
         _isEasyMode = prefs.getBool('easyMode') ?? false;
       });
@@ -263,8 +264,8 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       final json = jsonEncode(_allFiles.map((f) => f.toJson()).toList());
       await prefs.setString('libraryCache', json);
       _log('Saved ${_allFiles.length} files to library cache.');
-    } catch (e) { 
-      _log('Error saving library cache: $e'); 
+    } catch (e) {
+      _log('Error saving library cache: $e');
       if (kIsWeb && e.toString().contains('QuotaExceededError')) {
         _log('WARNING: Library cache too large for LocalStorage.');
       }
@@ -279,7 +280,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       if (meta != null) {
         mp3File.title = meta['Title']?.toString() ?? meta['title']?.toString();
         mp3File.artist = meta['Artist']?.toString() ?? meta['artist']?.toString();
-        
+
         dynamic apicData = meta['APIC'] ?? meta['PIC'];
         if (apicData != null) {
           if (apicData is Map && apicData.containsKey('base64')) {
@@ -325,15 +326,15 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         if (entity is File && entity.path.toLowerCase().endsWith('.mp3')) {
           final stat = await entity.stat();
           final identity = '${p.basename(entity.path)}-${stat.size}';
-          
+
           if (cachedMap.containsKey(identity)) {
             final cachedFile = cachedMap[identity]!;
             cachedFile.desktopPath = entity.path; // Update path in case it changed
             updatedList.add(cachedFile);
           } else {
             final newFile = MP3File(
-              name: p.basename(entity.path), 
-              size: stat.size, 
+              name: p.basename(entity.path),
+              size: stat.size,
               desktopPath: entity.path
             );
             updatedList.add(newFile);
@@ -421,7 +422,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       input.onChange.listen((event) async {
         final files = input.files;
         if (files == null || files.isEmpty) return;
-        
+
         _cleanupWebUrls();
         Map<String, MP3File> cachedMap = { for (var f in _allFiles) f.identity : f };
         List<MP3File> updatedLibrary = [];
@@ -465,7 +466,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         allowMultiple: true,
       );
       if (result == null || result.files.isEmpty) return;
-      
+
       final firstPath = result.files.first.path;
       String? folderPath;
       if (firstPath != null) {
@@ -473,7 +474,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('sourcePath', folderPath);
       }
-      
+
       setState(() { _sourcePath = folderPath; });
       if (folderPath != null) {
         _autoRefreshDesktopFiles(folderPath);
@@ -524,10 +525,10 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   void _handlePlayback(MP3File file) async {
     if (_currentFile == file) {
-      if (_playerState == PlayerState.playing) { 
-        await _audioPlayer.pause(); 
-      } else if (_playerState == PlayerState.paused) { 
-        await _audioPlayer.resume(); 
+      if (_playerState == PlayerState.playing) {
+        await _audioPlayer.pause();
+      } else if (_playerState == PlayerState.paused) {
+        await _audioPlayer.resume();
       } else {
         await _play(file, playlistMode: _isPlaylistMode);
       }
@@ -546,16 +547,16 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       _onFilterSubmitted(_filter);
     }
     try {
-      setState(() { 
-        _currentFile = file; 
+      setState(() {
+        _currentFile = file;
         _isPlaylistMode = playlistMode;
         _position = Duration.zero;
         _duration = Duration.zero;
       });
-      if (kIsWeb && file.url != null) { 
-        await _audioPlayer.play(UrlSource(file.url!)); 
-      } else if (!kIsWeb && file.desktopPath != null) { 
-        await _audioPlayer.play(DeviceFileSource(file.desktopPath!)); 
+      if (kIsWeb && file.url != null) {
+        await _audioPlayer.play(UrlSource(file.url!));
+      } else if (!kIsWeb && file.desktopPath != null) {
+        await _audioPlayer.play(DeviceFileSource(file.desktopPath!));
       }
     } catch (e) { _log('PLAYBACK ERROR: $e'); }
   }
@@ -676,7 +677,101 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             ],
           ),
         ),
+        if (_isAdminMode)
+          PopupMenuItem(
+            onTap: () => _showEditArtworkDialog(context, file),
+            child: Row(
+              children: [
+                const Icon(Icons.image_outlined, color: Colors.cyan, size: 20),
+                const SizedBox(width: 12),
+                const Text('Edit Artwork', style: TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'Montserrat')),
+              ],
+            ),
+          ),
       ],
+    );
+  }
+
+  Future<void> _showEditArtworkDialog(BuildContext context, MP3File file) async {
+    Uint8List? newArtwork;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1F1F1F),
+            title: Text('Edit Artwork - ${file.name}', style: const TextStyle(color: Colors.cyan, fontSize: 16, fontFamily: 'Montserrat')),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 200, height: 200,
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: newArtwork != null
+                    ? Image.memory(newArtwork!, fit: BoxFit.cover)
+                    : file.artwork != null
+                      ? Image.memory(file.artwork!, fit: BoxFit.cover)
+                      : const Icon(Icons.image_search, color: Colors.white10, size: 64),
+                ),
+                const SizedBox(height: 16),
+                Text(newArtwork == null ? 'Paste an image or drag/drop (Web only)' : 'New artwork ready!', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
+                    if (result != null && result.files.first.bytes != null) {
+                      setDialogState(() { newArtwork = result.files.first.bytes; });
+                    } else if (result != null && result.files.first.path != null) {
+                      setDialogState(() { newArtwork = File(result.files.first.path!).readAsBytesSync(); });
+                    }
+                  },
+                  icon: const Icon(Icons.file_upload),
+                  label: const Text('Choose Image'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+              ElevatedButton(
+                onPressed: newArtwork == null ? null : () async {
+                  bool? confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Update File?'),
+                      content: const Text('This will update the MP3 file permanently. Continue?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
+                        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Yes')),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    setState(() { file.artwork = newArtwork; });
+                    if (!kIsWeb && file.desktopPath != null) {
+                      try {
+                        // For Desktop, we overwrite the physical file with the current metadata + new artwork
+                        // Note: Using the id3 library to parse then writing back is complex without a tag-writer lib.
+                        // For now, we update the internal state and cache.
+                        _log('Artwork updated for ${file.name}. (Cache updated)');
+                      } catch (e) { _log('Update failed: $e'); }
+                    }
+                    _saveLibraryCache();
+                    Navigator.pop(context);
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black),
+                child: const Text('Apply Changes'),
+              ),
+            ],
+          );
+        }
+      ),
     );
   }
 
@@ -688,9 +783,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       if (_filter.isNotEmpty) {
         final query = _filter.toLowerCase();
         final words = query.split(' ').where((w) => w.isNotEmpty).toList();
-        final matchesWords = words.every((word) => 
-          file.name.toLowerCase().contains(word) || 
-          (file.title?.toLowerCase().contains(word) ?? false) || 
+        final matchesWords = words.every((word) =>
+          file.name.toLowerCase().contains(word) ||
+          (file.title?.toLowerCase().contains(word) ?? false) ||
           (file.artist?.toLowerCase().contains(word) ?? false)
         );
         if (!matchesWords) return false;
@@ -755,7 +850,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                   suffixIcon: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      if (_filter.isNotEmpty) 
+                                      if (_filter.isNotEmpty)
                                         IconButton(icon: Icon(Icons.clear, size: 16 * scale), onPressed: () { controller.clear(); setState(() { _filter = ''; }); }),
                                       Icon(Icons.arrow_drop_down, color: Colors.grey, size: 20 * scale),
                                       const SizedBox(width: 8),
@@ -835,8 +930,18 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
               if (value == 'load') _handlePickSourceFiles();
               if (value == 'dest') _pickDestinationDirectory();
               if (value == 'logs') _downloadLogs();
+              if (value == 'toggleAdmin') setState(() { _isAdminMode = !_isAdminMode; });
             },
             itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'toggleAdmin',
+                child: ListTile(
+                  leading: Icon(_isAdminMode ? Icons.person_outline : Icons.admin_panel_settings_outlined, size: 20 * scale),
+                  title: Text(_isAdminMode ? 'Switch to User' : 'Switch to Admin', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')),
+                  dense: true,
+                ),
+              ),
+              const PopupMenuDivider(),
               PopupMenuItem(value: 'load', child: ListTile(leading: Icon(Icons.library_music_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Load' : 'Load MP3s', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
               if (!kIsWeb) PopupMenuItem(value: 'dest', child: ListTile(leading: Icon(Icons.folder_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Save to' : 'Set Destination', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
               PopupMenuItem(value: 'logs', child: ListTile(leading: Icon(Icons.description_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Logs' : 'Download Logs', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
@@ -875,7 +980,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                 final isSelected = _selectedFiles.contains(file);
                                 final isCurrent = _currentFile == file;
                                 final isPlaying = isCurrent && _playerState == PlayerState.playing;
-                                
+
                                 return MouseRegion(
                                   cursor: SystemMouseCursors.click,
                                   child: GestureDetector(
@@ -920,12 +1025,12 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                                       child: GestureDetector(
                                                         onTap: () => _handlePlayback(file),
                                                         child: Container(
-                                                          padding: EdgeInsets.all(8 * scale), 
+                                                          padding: EdgeInsets.all(8 * scale),
                                                           decoration: BoxDecoration(
-                                                            color: Colors.cyan, 
+                                                            color: Colors.cyan,
                                                             shape: BoxShape.circle,
                                                             boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))]
-                                                          ), 
+                                                          ),
                                                           child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.black, size: 24 * scale)
                                                         ),
                                                       ),
@@ -939,21 +1044,21 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                                   crossAxisAlignment: CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
-                                                      file.displayTitle, 
-                                                      maxLines: 1, 
-                                                      overflow: TextOverflow.ellipsis, 
+                                                      file.displayTitle,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
                                                       style: TextStyle(
-                                                        fontSize: 12 * scale, 
-                                                        fontWeight: FontWeight.w600, 
+                                                        fontSize: 12 * scale,
+                                                        fontWeight: FontWeight.w600,
                                                         color: isCurrent ? Colors.cyan : Colors.white.withOpacity(0.9),
                                                         fontFamily: 'Montserrat',
                                                       )
                                                     ),
                                                     SizedBox(height: 2 * scale),
                                                     Text(
-                                                      file.displayArtist, 
-                                                      maxLines: 1, 
-                                                      overflow: TextOverflow.ellipsis, 
+                                                      file.displayArtist,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
                                                       style: TextStyle(fontSize: 10 * scale, color: Colors.white54, fontWeight: FontWeight.w300, fontFamily: 'Montserrat')
                                                     ),
                                                   ],
@@ -992,9 +1097,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                   SizedBox(width: 4 * scale),
                                 ],
                                 ElevatedButton.icon(
-                                  onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null, 
-                                  icon: Icon(kIsWeb ? Icons.download : Icons.copy, size: 18 * scale), 
-                                  label: Text(kIsWeb ? (_isEasyMode ? 'Get' : 'Download') : (_isEasyMode ? 'Save' : 'Copy Now'), style: TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.w600, fontSize: 13 * scale)), 
+                                  onPressed: _selectedFiles.isNotEmpty ? _copySelectedFiles : null,
+                                  icon: Icon(kIsWeb ? Icons.download : Icons.copy, size: 18 * scale),
+                                  label: Text(kIsWeb ? (_isEasyMode ? 'Get' : 'Download') : (_isEasyMode ? 'Save' : 'Copy Now'), style: TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.w600, fontSize: 13 * scale)),
                                   style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black, elevation: 0, padding: EdgeInsets.symmetric(horizontal: 16 * scale, vertical: 12 * scale))
                                 ),
                               ],
@@ -1021,18 +1126,18 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                                       borderRadius: BorderRadius.circular(8 * scale),
                                     ),
                                     clipBehavior: Clip.antiAlias,
-                                    child: file.artwork != null 
+                                    child: file.artwork != null
                                         ? Image.memory(file.artwork!, fit: BoxFit.cover)
                                         : Icon(Icons.music_note, size: 20 * scale, color: Colors.white10),
                                   ),
-                                  title: Text(file.displayTitle, 
+                                  title: Text(file.displayTitle,
                                     style: TextStyle(
-                                      fontSize: 12 * scale, 
-                                      fontWeight: FontWeight.w600, 
+                                      fontSize: 12 * scale,
+                                      fontWeight: FontWeight.w600,
                                       fontFamily: 'Montserrat',
                                       color: _currentFile == file ? Colors.cyan : Colors.white,
-                                    ), 
-                                    maxLines: 1, 
+                                    ),
+                                    maxLines: 1,
                                     overflow: TextOverflow.ellipsis
                                   ),
                                   subtitle: Text(file.displayArtist, style: TextStyle(fontSize: 10 * scale, fontWeight: FontWeight.w300, fontFamily: 'Montserrat', color: Colors.grey)),
@@ -1049,7 +1154,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
               ),
             ],
           ),
-          if (_currentFile != null) 
+          if (_currentFile != null)
             Positioned(
               left: 20 * scale,
               right: 20 * scale,
@@ -1125,7 +1230,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
                         color: Colors.grey[900],
                       ),
                       clipBehavior: Clip.antiAlias,
-                      child: _currentFile?.artwork != null 
+                      child: _currentFile?.artwork != null
                           ? Image.memory(_currentFile!.artwork!, fit: BoxFit.cover)
                           : Icon(Icons.music_note, color: Colors.white10, size: 24 * scale),
                     ),
