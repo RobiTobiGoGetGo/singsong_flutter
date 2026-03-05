@@ -67,6 +67,24 @@ class MP3File {
     this.artist,
   });
 
+  // Convert to JSON for persistence - ONLY TEXT METADATA
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'size': size,
+    'title': title,
+    'artist': artist,
+    'desktopPath': desktopPath,
+  };
+
+  // Create from JSON - NO ARTWORK LOADING
+  factory MP3File.fromJson(Map<String, dynamic> json) => MP3File(
+    name: json['name'],
+    size: json['size'],
+    title: json['title'],
+    artist: json['artist'],
+    desktopPath: json['desktopPath'],
+  );
+
   // Display Logic: Artist Group
   String get displayArtist {
     return artist?.trim().isNotEmpty == true ? artist! : 'Unknown Artist';
@@ -91,7 +109,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.61+62';
+  static const String appVersion = '1.0.62+63';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -259,7 +277,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   }
 
   Future<void> _autoRefreshDesktopFiles(String path) async {
-    _log('Refreshing desktop library from: $path');
+    _log('Scanning desktop library: $path');
     try {
       final dir = Directory(path);
       if (!await dir.exists()) return;
@@ -643,6 +661,20 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     }
   }
 
+  void _logMetadata() {
+    _log('--- LIBRARY METADATA LOG ---');
+    for (var file in _allFiles) {
+      _log('File: ${file.name}');
+      _log('  Size: ${file.size}');
+      _log('  Title: ${file.title ?? "N/A"}');
+      _log('  Artist: ${file.artist ?? "N/A"}');
+      _log('  DesktopPath: ${file.desktopPath ?? "N/A"}');
+      _log('--------------------------');
+    }
+    _log('Logged metadata for ${_allFiles.length} files.');
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Metadata written to logs.')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final double scale = _isEasyMode ? 1.4 : 1.0;
@@ -799,6 +831,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
               if (value == 'dest') _pickDestinationDirectory();
               if (value == 'logs') _downloadLogs();
               if (value == 'toggleAdmin') setState(() { _isAdminMode = !_isAdminMode; });
+              if (value == 'logMeta') _logMetadata();
             },
             itemBuilder: (context) => [
               PopupMenuItem(
@@ -813,6 +846,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
               PopupMenuItem(value: 'load', child: ListTile(leading: Icon(Icons.library_music_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Load' : 'Load MP3s', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
               if (!kIsWeb) PopupMenuItem(value: 'dest', child: ListTile(leading: Icon(Icons.folder_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Save to' : 'Set Destination', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
               PopupMenuItem(value: 'logs', child: ListTile(leading: Icon(Icons.description_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Logs' : 'Download Logs', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
+              PopupMenuItem(value: 'logMeta', child: ListTile(leading: Icon(Icons.summarize_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Metadata' : 'Log Metadata', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
               PopupMenuItem(enabled: false, child: Text(sourceInfo, style: TextStyle(fontSize: 11 * scale, color: Colors.grey, fontFamily: 'Montserrat'))),
             ],
           ),
