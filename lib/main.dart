@@ -93,7 +93,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.61+62';
+  static const String appVersion = '1.0.62+63';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -103,7 +103,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   final Set<MP3File> _selectedFiles = {};
   String? _sourcePath;
   String? _destinationPath;
-  final List<String> _logs = [];
+  final ValueNotifier<List<String>> _logsNotifier = ValueNotifier<List<String>>([]);
 
   bool _isLoading = false;
   int _filesProcessed = 0;
@@ -166,6 +166,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     _audioPlayer.dispose();
     _filterController.dispose();
     _filterFocusNode.dispose();
+    _logsNotifier.dispose();
     super.dispose();
   }
 
@@ -183,7 +184,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   void _log(String message) {
     final logLine = '${DateTime.now()}: $message';
     debugPrint(logLine);
-    setState(() { _logs.add(logLine); });
+    _logsNotifier.value = [..._logsNotifier.value, logLine];
   }
 
   void _showLogsDialog() {
@@ -207,15 +208,20 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
           ),
           padding: const EdgeInsets.all(8),
           child: Scrollbar(
-            child: ListView.builder(
-              itemCount: _logs.length,
-              itemBuilder: (context, index) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: SelectableText(
-                  _logs[index],
-                  style: const TextStyle(fontSize: 10, color: Colors.white70, fontFamily: 'monospace'),
-                ),
-              ),
+            child: ValueListenableBuilder<List<String>>(
+              valueListenable: _logsNotifier,
+              builder: (context, logs, _) {
+                return ListView.builder(
+                  itemCount: logs.length,
+                  itemBuilder: (context, index) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: SelectableText(
+                      logs[index],
+                      style: const TextStyle(fontSize: 10, color: Colors.white70, fontFamily: 'monospace'),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -225,10 +231,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             child: const Text('Close', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton.icon(
-            onPressed: () {
-              _downloadLogs();
-              Navigator.pop(context);
-            },
+            onPressed: _downloadLogs,
             icon: const Icon(Icons.download, size: 18),
             label: const Text('Download Logs'),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black),
@@ -240,7 +243,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   void _downloadLogs() {
     if (kIsWeb) {
-      final content = _logs.join('\n');
+      final content = _logsNotifier.value.join('\n');
       final blob = html.Blob([content], 'text/plain');
       final url = html.Url.createObjectUrlFromBlob(blob);
       html.AnchorElement(href: url)
