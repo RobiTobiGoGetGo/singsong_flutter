@@ -109,7 +109,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.62+63';
+  static const String appVersion = '1.0.60+61';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -128,6 +128,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   bool _isEasyMode = false;
   bool _isAdminMode = false;
+  bool _autoLogMetadata = false;
 
   String _filter = '';
   final TextEditingController _filterController = TextEditingController();
@@ -199,6 +200,58 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     final logLine = '${DateTime.now()}: $message';
     debugPrint(logLine);
     setState(() { _logs.add(logLine); });
+  }
+
+  void _showLogsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1F1F),
+        title: Row(
+          children: [
+            const Icon(Icons.description_outlined, color: Colors.cyan),
+            const SizedBox(width: 12),
+            const Text('Application Logs', style: TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Montserrat')),
+          ],
+        ),
+        content: Container(
+          width: double.maxFinite,
+          height: 400,
+          decoration: BoxDecoration(
+            color: Colors.black26,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.all(8),
+          child: Scrollbar(
+            child: ListView.builder(
+              itemCount: _logs.length,
+              itemBuilder: (context, index) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text(
+                  _logs[index],
+                  style: const TextStyle(fontSize: 10, color: Colors.white70, fontFamily: 'monospace'),
+                ),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              _downloadLogs();
+              Navigator.pop(context);
+            },
+            icon: const Icon(Icons.download, size: 18),
+            label: const Text('Download Logs'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black),
+          ),
+        ],
+      ),
+    );
   }
 
   void _downloadLogs() {
@@ -320,6 +373,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         final file = File(mp3File.desktopPath!);
         final bytes = await file.readAsBytes();
         _extractMetadata(mp3File, bytes);
+        if (_autoLogMetadata) {
+          _log('Processed: ${mp3File.name} | Title: ${mp3File.title ?? "N/A"} | Artist: ${mp3File.artist ?? "N/A"}');
+        }
       } catch (e) { _log('Error for ${mp3File.name}: $e'); }
 
       if (i % 5 == 0 || i == files.length - 1) {
@@ -439,6 +495,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         _extractMetadata(mp3File, bytes);
         final blob = html.Blob([bytes]);
         mp3File.url = html.Url.createObjectUrlFromBlob(blob);
+        if (_autoLogMetadata) {
+          _log('Processed: ${mp3File.name} | Title: ${mp3File.title ?? "N/A"} | Artist: ${mp3File.artist ?? "N/A"}');
+        }
       } catch (e) { _log('Error processing ${mp3File.name}: $e'); }
       if (i % 5 == 0 || i == files.length - 1) {
         if (mounted && loadId == _currentLoadId) setState(() { _filesProcessed = i + 1; });
@@ -662,17 +721,12 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   }
 
   void _logMetadata() {
-    _log('--- LIBRARY METADATA LOG ---');
+    _log('--- LIBRARY details LOG ---');
     for (var file in _allFiles) {
-      _log('File: ${file.name}');
-      _log('  Size: ${file.size}');
-      _log('  Title: ${file.title ?? "N/A"}');
-      _log('  Artist: ${file.artist ?? "N/A"}');
-      _log('  DesktopPath: ${file.desktopPath ?? "N/A"}');
-      _log('--------------------------');
+      _log('File: ${file.name} | Size: ${file.size} | Title: ${file.title ?? "N/A"} | Artist: ${file.artist ?? "N/A"}');
     }
-    _log('Logged metadata for ${_allFiles.length} files.');
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Metadata written to logs.')));
+    _log('Logged details for ${_allFiles.length} files.');
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('details written to logs.')));
   }
 
   @override
@@ -829,9 +883,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             onSelected: (value) {
               if (value == 'load') _handlePickSourceFiles();
               if (value == 'dest') _pickDestinationDirectory();
-              if (value == 'logs') _downloadLogs();
+              if (value == 'logs') _showLogsDialog();
               if (value == 'toggleAdmin') setState(() { _isAdminMode = !_isAdminMode; });
-              if (value == 'logMeta') _logMetadata();
+              if (value == 'logMeta') setState(() { _autoLogMetadata = !_autoLogMetadata; if (_autoLogMetadata) _logMetadata(); });
             },
             itemBuilder: (context) => [
               PopupMenuItem(
@@ -845,8 +899,15 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
               const PopupMenuDivider(),
               PopupMenuItem(value: 'load', child: ListTile(leading: Icon(Icons.library_music_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Load' : 'Load MP3s', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
               if (!kIsWeb) PopupMenuItem(value: 'dest', child: ListTile(leading: Icon(Icons.folder_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Save to' : 'Set Destination', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
-              PopupMenuItem(value: 'logs', child: ListTile(leading: Icon(Icons.description_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Logs' : 'Download Logs', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
-              PopupMenuItem(value: 'logMeta', child: ListTile(leading: Icon(Icons.summarize_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Metadata' : 'Log Metadata', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
+              PopupMenuItem(value: 'logs', child: ListTile(leading: Icon(Icons.description_outlined, size: 20 * scale), title: Text(_isEasyMode ? 'Logs' : 'View Logs', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')), dense: true)),
+              PopupMenuItem(
+                value: 'logMeta',
+                child: ListTile(
+                  leading: Icon(_autoLogMetadata ? Icons.toggle_on : Icons.toggle_off, color: _autoLogMetadata ? Colors.cyan : Colors.grey, size: 20 * scale),
+                  title: Text(_isEasyMode ? 'Log' : 'Auto-Log Details', style: TextStyle(fontSize: 14 * scale, fontFamily: 'Montserrat')),
+                  dense: true,
+                ),
+              ),
               PopupMenuItem(enabled: false, child: Text(sourceInfo, style: TextStyle(fontSize: 11 * scale, color: Colors.grey, fontFamily: 'Montserrat'))),
             ],
           ),
