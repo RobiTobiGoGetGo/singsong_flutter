@@ -67,24 +67,6 @@ class MP3File {
     this.artist,
   });
 
-  // Convert to JSON for persistence - ONLY TEXT METADATA
-  Map<String, dynamic> toJson() => {
-    'name': name,
-    'size': size,
-    'title': title,
-    'artist': artist,
-    'desktopPath': desktopPath,
-  };
-
-  // Create from JSON - NO ARTWORK LOADING
-  factory MP3File.fromJson(Map<String, dynamic> json) => MP3File(
-    name: json['name'],
-    size: json['size'],
-    title: json['title'],
-    artist: json['artist'],
-    desktopPath: json['desktopPath'],
-  );
-
   // Display Logic: Artist Group
   String get displayArtist {
     return artist?.trim().isNotEmpty == true ? artist! : 'Unknown Artist';
@@ -109,7 +91,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.60+61';
+  static const String appVersion = '1.0.61+62';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -169,12 +151,9 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
 
   Future<void> _initializeLibrary() async {
     await _loadStoredPaths();
-    await _loadLibraryCache();
 
     if (!kIsWeb && _sourcePath != null) {
       _autoRefreshDesktopFiles(_sourcePath!);
-    } else if (kIsWeb && _allFiles.isNotEmpty) {
-      _log('Web library restored from cache. Grant access to play.');
     }
   }
 
@@ -240,34 +219,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     } catch (e) { _log('Error loading paths: $e'); }
   }
 
-  Future<void> _loadLibraryCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cached = prefs.getString('libraryCache');
-      if (cached != null) {
-        final List<dynamic> decoded = jsonDecode(cached);
-        setState(() {
-          _allFiles = decoded.map((item) => MP3File.fromJson(item)).toList();
-          if (kIsWeb && _allFiles.isNotEmpty) {
-            _sourcePath = 'Cached Library (Grant access to play)';
-          }
-        });
-        _log('Loaded ${_allFiles.length} files from library cache.');
-      }
-    } catch (e) { _log('Error loading library cache: $e'); }
-  }
-
-  Future<void> _saveLibraryCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final json = jsonEncode(_allFiles.map((f) => f.toJson()).toList());
-      await prefs.setString('libraryCache', json);
-      _log('Saved ${_allFiles.length} files to library cache.');
-    } catch (e) {
-      _log('Error saving library cache: $e');
-    }
-  }
-
   void _extractMetadata(MP3File mp3File, Uint8List bytes) {
     try {
       final id3 = MP3Instance(bytes);
@@ -314,29 +265,19 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       if (!await dir.exists()) return;
 
       final entities = await dir.list().toList();
-      Map<String, MP3File> cachedMap = { for (var f in _allFiles) f.identity : f };
       List<MP3File> updatedList = [];
       List<MP3File> filesToProcess = [];
 
       for (var entity in entities) {
         if (entity is File && entity.path.toLowerCase().endsWith('.mp3')) {
           final stat = await entity.stat();
-          final identity = '${p.basename(entity.path)}-${stat.size}';
-
-          if (cachedMap.containsKey(identity)) {
-            final cachedFile = cachedMap[identity]!;
-            cachedFile.desktopPath = entity.path; // Update path in case it changed
-            updatedList.add(cachedFile);
-            filesToProcess.add(cachedFile); // Load artwork into memory
-          } else {
-            final newFile = MP3File(
-              name: p.basename(entity.path),
-              size: stat.size,
-              desktopPath: entity.path
-            );
-            updatedList.add(newFile);
-            filesToProcess.add(newFile);
-          }
+          final newFile = MP3File(
+            name: p.basename(entity.path),
+            size: stat.size,
+            desktopPath: entity.path
+          );
+          updatedList.add(newFile);
+          filesToProcess.add(newFile);
         }
       }
 
@@ -370,7 +311,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     }
     if (mounted && loadId == _currentLoadId) {
       setState(() { _isLoading = false; });
-      _saveLibraryCache();
     }
   }
 
@@ -421,24 +361,14 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         if (files == null || files.isEmpty) return;
 
         _cleanupWebUrls();
-        Map<String, MP3File> cachedMap = { for (var f in _allFiles) f.identity : f };
         List<MP3File> updatedLibrary = [];
         List<MP3File> filesToProcess = [];
 
         for (var file in files) {
           if (file.name.toLowerCase().endsWith('.mp3')) {
-            final identity = '${file.name}-${file.size}';
-            if (cachedMap.containsKey(identity)) {
-              final cached = cachedMap[identity]!;
-              cached.webFile = file;
-              updatedLibrary.add(cached);
-              // Re-process to load artwork into memory
-              filesToProcess.add(cached);
-            } else {
-              final newFile = MP3File(name: file.name, size: file.size, webFile: file);
-              updatedLibrary.add(newFile);
-              filesToProcess.add(newFile);
-            }
+            final newFile = MP3File(name: file.name, size: file.size, webFile: file);
+            updatedLibrary.add(newFile);
+            filesToProcess.add(newFile);
           }
         }
 
@@ -453,8 +383,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             _processWebFiles(filesToProcess, _currentLoadId);
           } else {
             _isLoading = false;
-            _log('Restored all selected files from cache.');
-            _refreshWebUrls();
           }
         });
       });
@@ -481,23 +409,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     }
   }
 
-  Future<void> _refreshWebUrls() async {
-    if (!kIsWeb) return;
-    for (var file in _allFiles) {
-      if (file.webFile != null && file.url == null) {
-        try {
-          final reader = html.FileReader();
-          reader.readAsArrayBuffer(file.webFile);
-          await reader.onLoadEnd.first;
-          final Uint8List bytes = reader.result as Uint8List;
-          final blob = html.Blob([bytes]);
-          file.url = html.Url.createObjectUrlFromBlob(blob);
-        } catch (_) {}
-      }
-    }
-    if (mounted) setState(() {});
-  }
-
   Future<void> _processWebFiles(List<MP3File> files, int loadId) async {
     for (int i = 0; i < files.length; i++) {
       if (loadId != _currentLoadId) return;
@@ -518,7 +429,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
     }
     if (mounted && loadId == _currentLoadId) {
       setState(() { _isLoading = false; });
-      _saveLibraryCache();
     }
   }
 
@@ -720,7 +630,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
             file.url = html.Url.createObjectUrlFromBlob(blob);
           }
         });
-        await _saveLibraryCache();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Refreshed details for: ${file.name}')));
         }
