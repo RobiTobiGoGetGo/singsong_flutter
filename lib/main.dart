@@ -55,6 +55,7 @@ class MP3File {
 
   String? title;
   String? artist;
+  Map<String, dynamic>? tags;
 
   MP3File({
     required this.name,
@@ -65,25 +66,8 @@ class MP3File {
     this.url,
     this.title,
     this.artist,
+    this.tags,
   });
-
-  // Convert to JSON for persistence - ONLY TEXT METADATA
-  Map<String, dynamic> toJson() => {
-    'name': name,
-    'size': size,
-    'title': title,
-    'artist': artist,
-    'desktopPath': desktopPath,
-  };
-
-  // Create from JSON - NO ARTWORK LOADING
-  factory MP3File.fromJson(Map<String, dynamic> json) => MP3File(
-    name: json['name'],
-    size: json['size'],
-    title: json['title'],
-    artist: json['artist'],
-    desktopPath: json['desktopPath'],
-  );
 
   // Display Logic: Artist Group
   String get displayArtist {
@@ -95,7 +79,7 @@ class MP3File {
     return title?.trim().isNotEmpty == true ? title! : name;
   }
 
-  // Identity helper for matching cached files
+  // Identity helper for matching files
   String get identity => '$name-$size';
 }
 
@@ -109,7 +93,7 @@ class SingSongHomePage extends StatefulWidget {
 }
 
 class _SingSongHomePageState extends State<SingSongHomePage> {
-  static const String appVersion = '1.0.60+61';
+  static const String appVersion = '1.0.61+62';
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   MP3File? _currentFile;
@@ -227,7 +211,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
               itemCount: _logs.length,
               itemBuilder: (context, index) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Text(
+                child: SelectableText(
                   _logs[index],
                   style: const TextStyle(fontSize: 10, color: Colors.white70, fontFamily: 'monospace'),
                 ),
@@ -296,6 +280,15 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
       id3.parseTagsSync();
       final meta = id3.getMetaTags();
       if (meta != null) {
+        final Map<String, dynamic> cleanMeta = Map.from(meta);
+        cleanMeta.remove('APIC');
+        cleanMeta.remove('PIC');
+        mp3File.tags = cleanMeta;
+
+        if (_autoLogMetadata) {
+          _log('RAW TAGS for ${mp3File.name}: $cleanMeta');
+        }
+
         mp3File.title = meta['Title']?.toString() ?? meta['title']?.toString();
         mp3File.artist = meta['Artist']?.toString() ?? meta['artist']?.toString();
 
@@ -330,7 +323,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   }
 
   Future<void> _autoRefreshDesktopFiles(String path) async {
-    _log('Scanning desktop library: $path');
+    _log('Refreshing desktop library from: $path');
     try {
       final dir = Directory(path);
       if (!await dir.exists()) return;
@@ -373,9 +366,6 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
         final file = File(mp3File.desktopPath!);
         final bytes = await file.readAsBytes();
         _extractMetadata(mp3File, bytes);
-        if (_autoLogMetadata) {
-          _log('Processed: ${mp3File.name} | Title: ${mp3File.title ?? "N/A"} | Artist: ${mp3File.artist ?? "N/A"}');
-        }
       } catch (e) { _log('Error for ${mp3File.name}: $e'); }
 
       if (i % 5 == 0 || i == files.length - 1) {
@@ -723,7 +713,7 @@ class _SingSongHomePageState extends State<SingSongHomePage> {
   void _logMetadata() {
     _log('--- LIBRARY details LOG ---');
     for (var file in _allFiles) {
-      _log('File: ${file.name} | Size: ${file.size} | Title: ${file.title ?? "N/A"} | Artist: ${file.artist ?? "N/A"}');
+      _log('File: ${file.name} | Tags: ${file.tags ?? "N/A"}');
     }
     _log('Logged details for ${_allFiles.length} files.');
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('details written to logs.')));
